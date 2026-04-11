@@ -87,6 +87,30 @@ The kernel should be stripped but not over-stripped. It should keep the features
 
 The first kernel target is QEMU, but the config should avoid QEMU-only assumptions when possible.
 
+### Kernel Config Summary
+
+The kernel config should keep these feature groups enabled:
+
+- UEFI and EFI stub boot support
+- `ext4` and the basic VFS layer
+- `tmpfs`, `proc`, `sysfs`, `devtmpfs`, and `cgroupfs`
+- cgroups v2 and the resource controllers needed for service limits
+- namespaces for process and mount isolation
+- `io_uring`
+- futex support
+- shared memory and anonymous memory primitives
+- Unix domain sockets
+- `eventfd` and `epoll`
+- `memfd_create`
+- virtio block, network, and console drivers for QEMU
+- PCI and basic virtual device support
+- networking stack, TCP/IP, and DHCP-capable NIC support
+- nftables or iptables support for host firewalling
+- loopback and tunnel basics required by local services
+- compression and crypto only as needed by the chosen filesystem and boot path
+
+The config should explicitly disable debugging, tracing, and other development-only features unless they are needed for bring-up.
+
 ## Filesystem Layout
 
 ### Root Filesystem
