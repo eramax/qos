@@ -258,6 +258,32 @@ Required primitives include:
 
 The distro should not treat `io_uring` as an IPC replacement. It is an async I/O path, while IPC should use the kernel primitives best suited to the communication pattern.
 
+### HTTP Server Baseline
+
+The first image should be capable of running a small HTTP server cleanly without extra platform dependencies.
+
+Required runtime support includes:
+
+- network stack support for TCP/IP
+- loopback networking
+- virtio network support in QEMU
+- async I/O support through `io_uring`
+- Unix domain sockets for local supervisor-to-app communication if needed
+- writable state under `/var` for logs, cache, and app data
+- stable environment variable injection per service
+- service user separation for the HTTP server process
+
+The environment for the HTTP server should be defined explicitly in the service configuration. That includes:
+
+- listening address and port
+- document root or application root
+- log destination
+- runtime configuration path
+- any secrets required by the service
+- limits for CPU, memory, and file descriptors where applicable
+
+The kernel config must support the HTTP server without requiring extra optional subsystems beyond the base networking and async I/O set already required by this spec.
+
 ### Installation Layout
 
 Applications should be installed into the immutable root image at build time, not into writable runtime state.
