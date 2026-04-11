@@ -10,13 +10,14 @@ ROOT="$(repo_root)"
 
 # Contract: refuse to run if the user is not somewhere inside this workspace.
 pwd_abs="$(pwd -P)"
-case "$pwd_abs" in
-  "$ROOT" | "$ROOT/"*) ;;
-  *) die "refusing to run outside workspace. cd into $ROOT (or a subdir) and re-run." ;;
-esac
+if [[ "$pwd_abs" != "$ROOT" ]]; then
+  root_len=${#ROOT}
+  if [[ "${pwd_abs:0:root_len}" != "$ROOT" || "${pwd_abs:root_len:1}" != "/" ]]; then
+    die "refusing to run outside workspace. cd into $ROOT (or a subdir) and re-run."
+  fi
+fi
 
 ensure_dir "$ROOT/build"
 ensure_dir "$ROOT/dist"
 
 echo "build scaffold ok: created/verified build/ and dist/ under $ROOT"
-

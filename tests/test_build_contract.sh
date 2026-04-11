@@ -15,8 +15,9 @@ repo_root="$(cd "$here/.." && pwd -P)"
 
 tmprepo="$(mktemp -d)"
 outside="$(mktemp -d)"
+special_base="$(mktemp -d)"
 cleanup() {
-  rm -rf "$tmprepo" "$outside"
+  rm -rf "$tmprepo" "$outside" "$special_base"
 }
 trap cleanup EXIT INT TERM
 
@@ -54,5 +55,36 @@ while IFS= read -r path; do
     *) die "unexpected path created in workspace: $path" ;;
   esac
 done < <(cd "$tmprepo" && find . -mindepth 1 -print | sed 's#^./##' | sort)
+
+# 3) Must work when the workspace path itself contains glob metacharacters.
+specialrepo="$special_base/repo[1]?"
+mkdir -p "$specialrepo/scripts/lib"
+cp "$repo_root/build.sh" "$specialrepo/build.sh"
+cp "$repo_root/scripts/lib/common.sh" "$specialrepo/scripts/lib/common.sh"
+chmod +x "$specialrepo/build.sh"
+(
+  cd "$specialrepo"
+  ./build.sh >/dev/null
+)
+[[ -d "$specialrepo/build" ]] || die "expected build/ to exist in special-path workspace"
+[[ -d "$specialrepo/dist" ]] || die "expected dist/ to exist in special-path workspace"
+
+# 4) Must refuse symlink escapes for build/ and dist/.
+symlinkrepo="$special_base/symlink-repo"
+outside_target="$special_base/outside-target"
+mkdir -p "$symlinkrepo/scripts/lib" "$outside_target"
+cp "$repo_root/build.sh" "$symlinkrepo/build.sh"
+cp "$repo_root/scripts/lib/common.sh" "$symlinkrepo/scripts/lib/common.sh"
+chmod +x "$symlinkrepo/build.sh"
+ln -s "$outside_target" "$symlinkrepo/build"
+ln -s "$outside_target" "$symlinkrepo/dist"
+(
+  cd "$symlinkrepo"
+  set +e
+  ./build.sh >/dev/null 2>&1
+  rc=$?
+  set -e
+  [[ $rc -ne 0 ]] || die "expected build.sh to fail when build/ and dist/ are symlink escapes"
+)
 
 echo "ok"

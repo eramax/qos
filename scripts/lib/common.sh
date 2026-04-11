@@ -87,8 +87,11 @@ ensure_dir() {
     fi
   done
 
-  if [[ "$canon" != "$root" && "${canon#"$root/"}" == "$canon" ]]; then
-    die "refusing to create directory outside repo: $target"
+  if [[ "$canon" != "$root" ]]; then
+    local root_len=${#root}
+    if [[ "${canon:0:root_len}" != "$root" || "${canon:root_len:1}" != "/" ]]; then
+      die "refusing to create directory outside repo: $target"
+    fi
   fi
 
   mkdir -p -- "$canon"
