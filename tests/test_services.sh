@@ -43,9 +43,9 @@ ROOTFS_DIR="$rootfs_dir" "$repo_root/scripts/install-services.sh" >/dev/null
 grep -qxF 'DROPBEAR_EXTRA_ARGS="-s -j -k"' "$rootfs_dir/etc/dropbear/dropbear.conf" || die "dropbear config is not key-only"
 grep -qxF 'auto eth0' "$rootfs_dir/etc/network/interfaces.dhcp" || die "network config missing auto eth0"
 grep -qxF 'iface eth0 inet dhcp' "$rootfs_dir/etc/network/interfaces.dhcp" || die "network config missing DHCP stanza"
-grep -q 'udhcpc' "$rootfs_dir/etc/s6/service-tree/networking/run" || die "networking service does not use DHCP client"
-grep -q 'dropbear -F -E' "$rootfs_dir/etc/s6/service-tree/dropbear/run" || die "dropbear service not foregrounded"
-grep -q 'nft -f /etc/nftables/nftables.conf' "$rootfs_dir/etc/s6/service-tree/nftables/run" || die "nftables service does not load the firewall rules"
+grep -q '/bin/busybox udhcpc' "$rootfs_dir/etc/s6/service-tree/networking/run" || die "networking service does not use DHCP client"
+grep -q '/usr/sbin/dropbear -R -F -E' "$rootfs_dir/etc/s6/service-tree/dropbear/run" || die "dropbear service not foregrounded"
+grep -q '/usr/sbin/nft -f /etc/nftables/nftables.conf' "$rootfs_dir/etc/s6/service-tree/nftables/run" || die "nftables service does not load the firewall rules"
 grep -q 'table inet filter' "$rootfs_dir/etc/nftables/nftables.conf" || die "nftables config missing inet filter table"
 ! grep -q 'iptables' "$rootfs_dir/etc/nftables/nftables.conf" || die "nftables config must not mention iptables"
 

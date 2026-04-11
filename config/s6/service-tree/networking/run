@@ -1,5 +1,10 @@
 #!/bin/sh
 set -eu
 
-# Bring up the primary interface with DHCP.
-exec /bin/busybox udhcpc -i eth0 -q -f
+# Bring up the first non-loopback interface with DHCP.
+iface="$(ls /sys/class/net | grep -vx lo | head -n1 || true)"
+[ -n "$iface" ] || {
+  echo "networking: no non-loopback interface found" >&2
+  exit 1
+}
+exec /bin/busybox udhcpc -i "$iface" -q -f
