@@ -1,0 +1,8 @@
+# System packages layered on top of the base image.
+execline
+dropbear
+nftables
+s6-linux-init
+s6-portable-utils
+s6-rc
+uutils-coreutils

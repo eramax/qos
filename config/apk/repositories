@@ -1,0 +1,4 @@
+# Alpine package repositories for the target image.
+# These are the current stable repositories; later we can pin snapshots for stricter reproducibility.
+https://dl-cdn.alpinelinux.org/alpine/v3.22/main
+https://dl-cdn.alpinelinux.org/alpine/v3.22/community

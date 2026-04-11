@@ -1,0 +1,9 @@
+# Minimal base packages for the immutable Alpine rootfs.
+# Keep this list small and auditable.
+alpine-baselayout
+alpine-keys
+apk-tools
+busybox
+ca-certificates
+musl
+tzdata
