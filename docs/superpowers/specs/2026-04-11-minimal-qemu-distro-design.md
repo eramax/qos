@@ -354,6 +354,37 @@ This split keeps each part focused:
 
 The first release should emit a single raw disk image as the canonical artifact for QEMU. Additional formats can be added later if needed.
 
+### Host Prerequisites
+
+The build host needs a small set of tools to assemble the image reproducibly:
+
+- `git`
+- `curl`
+- `ca-certificates`
+- `bash`
+- `python3`
+- `jq`
+- `mkosi`
+- `qemu-system-x86_64`
+- `qemu-img`
+- `squashfs-tools`
+- `xorriso`
+- `mtools`
+- `dosfstools`
+- `e2fsprogs`
+- `parted`
+- `sfdisk`
+- `limine`
+- `libarchive-tools`
+
+If the build host is Debian or Ubuntu based, the equivalent install command is:
+
+```bash
+sudo apt install git curl ca-certificates bash python3 jq mkosi qemu-system-x86 qemu-utils squashfs-tools xorriso mtools dosfstools e2fsprogs parted util-linux limine libarchive-tools
+```
+
+The distro itself should still use Alpine packages directly for the target image. The `apt` command is only for the build host.
+
 ## QEMU Test Workflow
 
 The first validation target is QEMU x86_64 with UEFI.
