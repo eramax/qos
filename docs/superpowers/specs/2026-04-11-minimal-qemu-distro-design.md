@@ -391,6 +391,39 @@ Security is based on minimizing the base system and reducing mutable state:
 
 This is not a full sandboxing platform. It is a small server OS with simple, auditable controls.
 
+## Update and Delivery Model
+
+The base operating system should support image-based OTA updates rather than in-place mutation of the immutable root filesystem.
+
+### OTA Strategy
+
+The update flow should use A/B slots:
+
+1. Build a new full image.
+2. Sign or checksum-verify the artifact.
+3. Download it to the inactive slot.
+4. Switch the boot target to the new slot.
+5. Reboot into the new image.
+6. Confirm the boot and basic health checks.
+7. Roll back automatically to the previous slot if the new boot fails.
+
+### Mutable State During Updates
+
+Only mutable state under `/var` should persist across image swaps.
+
+That includes:
+
+- logs
+- application data
+- service state
+- SSH host keys if they are not baked into the image
+
+### Update Scope
+
+- Root filesystem updates should not happen in place.
+- Kernel and initramfs should be delivered as part of the image.
+- App-level changes can still be applied independently by rebuilding the image or restarting services where appropriate.
+
 ## Acceptance Criteria
 
 The first release is complete when:
