@@ -115,12 +115,13 @@ The config should explicitly disable debugging, tracing, and other development-o
 
 ### Scheduler Policy
 
-Use the mainline fair scheduler path with dynamic preemption, not a real-time kernel.
+Use the mainline fair scheduler path with throughput-first tuning, not a real-time kernel.
 
 Recommended settings:
 
 - `CONFIG_PREEMPT_DYNAMIC=y`
-- `CONFIG_SCHED_CORE=y` only if core scheduling is explicitly needed later
+- `CONFIG_PREEMPT_VOLUNTARY=y` as the baseline behavior, with dynamic preemption available for tuning
+- `CONFIG_SCHED_CORE=n`
 - `CONFIG_SCHED_AUTOGROUP=n`
 - `CONFIG_HZ_250=y` for a balanced server tick rate
 - `CONFIG_NO_HZ_IDLE=y`
@@ -129,6 +130,7 @@ Recommended settings:
 - `CONFIG_UCLAMP_TASK=y`
 
 The distro should rely on the kernel's mainline fair scheduler behavior for normal server workloads and use cgroups or service limits for per-app control instead of RT scheduling.
+The default goal is high aggregate throughput with low scheduler overhead, not desktop interactivity or hard real-time latency.
 
 ## Filesystem Layout
 

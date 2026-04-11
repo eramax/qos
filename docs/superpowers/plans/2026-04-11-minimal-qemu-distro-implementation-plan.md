@@ -138,6 +138,7 @@ Create `tests/test_boot_assets.sh` that verifies the build outputs include:
 - initramfs
 - Limine configuration
 - UEFI boot files
+- kernel scheduler policy settings from the spec
 
 Run:
 ```bash
@@ -150,6 +151,7 @@ Expected: fail until boot assets are generated.
 Write `scripts/build-kernel.sh` to:
 - accept an x86_64 kernel config
 - build a stripped kernel with the required feature groups from the spec
+- apply the throughput-first scheduler profile from the spec
 - store outputs under `build/kernel`
 
 Write `scripts/build-initramfs.sh` to:
