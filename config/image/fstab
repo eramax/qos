@@ -1,0 +1,5 @@
+# Immutable root with explicit writable state and runtime mounts.
+/dev/disk/by-label/qos-root-a / ext4 ro,errors=remount-ro 0 1
+/dev/disk/by-label/qos-state /var ext4 rw,errors=remount-ro 0 2
+tmpfs /run tmpfs rw,nosuid,nodev,mode=0755 0 0
+tmpfs /tmp tmpfs rw,nosuid,nodev,mode=1777 0 0

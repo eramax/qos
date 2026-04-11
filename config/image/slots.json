@@ -1,0 +1,6 @@
+{
+  "active": "A",
+  "inactive": "B",
+  "fallback": "A",
+  "rollback_marker": "var/lib/qos/slot-state.json"
+}

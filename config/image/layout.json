@@ -1,0 +1,33 @@
+{
+  "boot_mode": "uefi",
+  "disk_format": "raw",
+  "partition_table": "gpt",
+  "partitions": [
+    {
+      "name": "efi",
+      "filesystem": "vfat",
+      "mount": "/boot/efi",
+      "size": "256M"
+    },
+    {
+      "name": "root-a",
+      "filesystem": "ext4",
+      "mount": "/",
+      "slot": "A",
+      "immutable": true
+    },
+    {
+      "name": "root-b",
+      "filesystem": "ext4",
+      "mount": "/",
+      "slot": "B",
+      "immutable": true
+    },
+    {
+      "name": "state",
+      "filesystem": "ext4",
+      "mount": "/var",
+      "mutable": true
+    }
+  ]
+}
