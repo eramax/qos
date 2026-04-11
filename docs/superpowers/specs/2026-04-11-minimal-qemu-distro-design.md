@@ -9,7 +9,7 @@ Core decisions:
 - UEFI only boot
 - `Limine` bootloader
 - `ext4` root filesystem
-- mostly immutable rootfs
+- immutable rootfs
 - writable state isolated under `/var`
 - `s6` and `s6-rc` for init and supervision
 - `apk-tools` and Alpine packages directly
@@ -24,7 +24,7 @@ Core decisions:
 - Boot reliably in QEMU x86_64 with UEFI.
 - Keep the base system small and easy to audit.
 - Use Alpine packages directly instead of inventing a separate package ecosystem.
-- Keep the runtime mostly immutable so updates are controlled and rollback-friendly.
+- Keep the runtime immutable so updates are controlled, rollback-friendly, and easy to replace as whole images.
 - Make the whole image reproducible from one top-level build script.
 - Keep the system suitable for future real hardware support without overfitting to QEMU.
 
@@ -87,7 +87,7 @@ The first kernel target is QEMU, but the config should avoid QEMU-only assumptio
 ### Root Filesystem
 
 - `/` is `ext4`.
-- The root filesystem is mostly immutable.
+- The root filesystem is immutable.
 - Runtime state lives outside the base root image.
 
 ### Writable State
@@ -311,6 +311,6 @@ The first release is complete when:
 - `s6` starts as PID 1
 - DHCP networking works
 - `Dropbear` is reachable
-- the base filesystem is mostly immutable
+- the base filesystem is immutable
 - Alpine packages are installed directly
 - the system can be updated in a rolling fashion
