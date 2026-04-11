@@ -50,17 +50,49 @@ ensure_dir() {
   local root
   root="$(repo_root)"
 
-  # Convert to absolute path if needed.
-  if [[ "$target" != /* ]]; then
-    target="$root/$target"
+  # Convert to absolute path relative to the repo root if needed.
+  local abs_target
+  if [[ "$target" == /* ]]; then
+    abs_target="$target"
+  else
+    abs_target="$root/$target"
   fi
 
-  case "$target" in
+  # Canonicalize the target before doing any "inside root" checks. This avoids
+  # raw-string prefix matches being tricked by ".." segments and also catches
+  # existing symlink components that resolve outside the repo.
+  local canon="/"
+  local rel part next
+  local -a parts
+  rel="${abs_target#/}"
+  IFS='/' read -r -a parts <<< "$rel"
+  for part in "${parts[@]}"; do
+    [[ -n "$part" && "$part" != "." ]] || continue
+    if [[ "$part" == ".." ]]; then
+      [[ "$canon" == "/" ]] || canon="$(dirname "$canon")"
+      continue
+    fi
+
+    if [[ "$canon" == "/" ]]; then
+      next="/$part"
+    else
+      next="$canon/$part"
+    fi
+
+    if [[ -e "$next" ]]; then
+      [[ -d "$next" ]] || die "ensure_dir: path component exists but is not a directory: $next"
+      canon="$(_abspath_dir "$next")" || die "ensure_dir: cannot resolve path component: $next"
+    else
+      canon="$next"
+    fi
+  done
+
+  case "$canon" in
     "$root" | "$root/"*) ;;
     *) die "refusing to create directory outside repo: $target" ;;
   esac
 
-  mkdir -p "$target"
+  mkdir -p -- "$canon"
 }
 
 _cleanup_cmds=()
@@ -85,4 +117,3 @@ _run_cleanups() {
     eval "${_cleanup_cmds[$i]}" || true
   done
 }
-
