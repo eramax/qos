@@ -214,6 +214,22 @@ The first release does not need a heavy service mesh or Kubernetes-style network
 
 Applications are ordinary native Linux services managed by `s6`.
 
+### Installation Layout
+
+Applications should be installed into the immutable root image at build time, not into writable runtime state.
+
+Standard locations:
+
+- binaries: `/usr/bin` or `/usr/sbin`
+- libraries: `/usr/lib`
+- static data: `/usr/share`
+- service definitions: the `s6` service tree or `/etc` as appropriate for the service
+- mutable app state: `/var/lib/<app>`
+- logs: `/var/log/<app>`
+- runtime sockets and pid files: `/run/<app>`
+
+This keeps the image reproducible while making app-specific state easy to isolate.
+
 ### App Language Policy
 
 There is no enforced Rust or Zig-only policy in the current spec.
