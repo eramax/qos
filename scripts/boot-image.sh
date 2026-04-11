@@ -32,7 +32,7 @@ esac
 [[ -f "$image_path" ]] || die "missing image artifact: $image_path"
 
 if [[ "$mode" == "qemu" ]]; then
-  exec "$script_dir/run-qemu.sh" "$image_path"
+  QEMU_SERIAL_MODE=stdio exec "$script_dir/run-qemu.sh" "$image_path"
 fi
 
 log_file="${BOOT_LOG_FILE:-$root/build/boot/boot.log}"

@@ -9,11 +9,14 @@ source "$script_dir/lib/common.sh"
 root="$(repo_root)"
 image_path="${QEMU_IMAGE:-${1:-}}"
 log_file="${QEMU_LOG_FILE:-$root/build/qemu/serial.log}"
+serial_mode="${QEMU_SERIAL_MODE:-file}"
 
 [[ -n "$image_path" ]] || die "usage: $0 <image-path>"
 [[ -f "$image_path" ]] || die "missing image artifact: $image_path"
 
-mkdir -p "$(dirname "$log_file")"
+if [[ "$serial_mode" == "file" ]]; then
+  mkdir -p "$(dirname "$log_file")"
+fi
 
 if [[ "${QEMU_RUN_MOCK:-0}" == "1" ]]; then
   cat > "$log_file" <<'EOF'
@@ -65,6 +68,20 @@ ovmf_vars_runtime="${QEMU_OVMF_VARS_RUNTIME:-$root/build/qemu/OVMF_VARS.fd}"
 mkdir -p "$(dirname "$ovmf_vars_runtime")"
 cp "$ovmf_vars" "$ovmf_vars_runtime"
 
+hostfwd_port="${QEMU_HOSTFWD_PORT:-2222}"
+
+if [[ "$serial_mode" == "file" ]]; then
+  qemu_serial_arg=(-serial "file:$log_file")
+else
+  qemu_serial_arg=(-serial "$serial_mode")
+fi
+
+if [[ -n "$hostfwd_port" && "$hostfwd_port" != "none" ]]; then
+  qemu_netdev_arg=(-netdev "user,id=net0,hostfwd=tcp::${hostfwd_port}-:22")
+else
+  qemu_netdev_arg=(-netdev "user,id=net0")
+fi
+
 qemu-system-x86_64 \
   -machine q35,accel=tcg \
   -cpu max \
@@ -73,5 +90,7 @@ qemu-system-x86_64 \
   -drive if=pflash,format=raw,unit=1,file="$ovmf_vars_runtime" \
   -drive if=none,file="$image_path",id=bootdisk,format=raw \
   -device virtio-blk-pci,drive=bootdisk,bootindex=1 \
-  -serial file:"$log_file" \
+  "${qemu_netdev_arg[@]}" \
+  -device virtio-net-pci,netdev=net0 \
+  "${qemu_serial_arg[@]}" \
   -display none

@@ -2,4 +2,4 @@
 set -eu
 
 # Load the host firewall policy for the minimal server image.
-exec nft -f /etc/nftables/nftables.conf
+exec /usr/sbin/nft -f /etc/nftables/nftables.conf

@@ -30,8 +30,10 @@ while IFS= read -r path; do
   mkdir -p "$rootfs/$rel"
 done < "$paths_file"
 
-# Immutable rootfs should expose /bin/sh via ash.
+# Immutable rootfs should expose /bin/ash via busybox and /bin/sh via ash.
+ln -sfn busybox "$rootfs/bin/ash"
 ln -sfn ash "$rootfs/bin/sh"
+ln -sfn /bin/busybox "$rootfs/sbin/getty"
 ln -sfn /usr/bin/s6-linux-init "$rootfs/sbin/init"
 
 while IFS= read -r path; do

@@ -18,6 +18,8 @@ system_pkgs_file="$root/config/apk/packages.system"
 [[ -f "$base_pkgs_file" ]] || die "missing base package manifest: $base_pkgs_file"
 [[ -f "$system_pkgs_file" ]] || die "missing system package manifest: $system_pkgs_file"
 
+chmod -R u+w "$rootfs" 2>/dev/null || true
+rm -rf "$rootfs"
 mkdir -p "$rootfs"
 mkdir -p "$cache_root"
 

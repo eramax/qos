@@ -2,4 +2,4 @@
 set -eu
 
 # Bring up the primary interface with DHCP.
-exec udhcpc -i eth0 -q -f
+exec /bin/busybox udhcpc -i eth0 -q -f

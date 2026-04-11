@@ -35,6 +35,10 @@ ROOTFS_DIR="$rootfs_dir" "$repo_root/scripts/install-services.sh" >/dev/null
 [[ -f "$rootfs_dir/etc/s6/s6-rc.d/networking/type" ]] || die "missing networking s6-rc type"
 [[ -f "$rootfs_dir/etc/s6/s6-rc.d/dropbear/type" ]] || die "missing dropbear s6-rc type"
 [[ -f "$rootfs_dir/etc/s6/s6-rc.d/nftables/type" ]] || die "missing nftables s6-rc type"
+[[ -d "$rootfs_dir/etc/s6-linux-init/current/env" ]] || die "missing s6-linux-init env dir"
+[[ -d "$rootfs_dir/etc/s6-linux-init/current/run-image" ]] || die "missing s6-linux-init run-image"
+[[ -x "$rootfs_dir/etc/s6-linux-init/current/scripts/runlevel" ]] || die "missing s6-linux-init runlevel script"
+[[ -L "$rootfs_dir/sbin/init" ]] || die "missing init symlink"
 
 grep -qxF 'DROPBEAR_EXTRA_ARGS="-s -j -k"' "$rootfs_dir/etc/dropbear/dropbear.conf" || die "dropbear config is not key-only"
 grep -qxF 'auto eth0' "$rootfs_dir/etc/network/interfaces.dhcp" || die "network config missing auto eth0"
@@ -50,4 +54,3 @@ if find "$rootfs_dir/etc" -perm -u=w -print | grep -q .; then
 fi
 
 echo "ok"
-

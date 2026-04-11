@@ -13,9 +13,11 @@ rootfs="${ROOTFS_DIR:-$root/build/rootfs}"
 root_label="${ROOT_LABEL:-qos-root-a}"
 state_label="${STATE_LABEL:-qos-state}"
 stage_root="$initramfs_build_dir/root"
-host_busybox="$(command -v busybox)"
+host_busybox="/usr/bin/busybox"
 
 [[ -f "$initramfs_config" ]] || die "missing initramfs config: $initramfs_config"
+chmod -R u+w "$initramfs_build_dir" 2>/dev/null || true
+rm -rf "$stage_root"
 mkdir -p "$stage_root"
 
 cp "$initramfs_config" "$initramfs_build_dir/mkinitfs.conf"
@@ -35,12 +37,19 @@ manifest_add "command: scripts/build-initramfs.sh root=$root_label state=$state_
 mkdir -p "$stage_root/bin" "$stage_root/dev" "$stage_root/proc" "$stage_root/sys" "$stage_root/run" "$stage_root/sysroot"
 cp "$host_busybox" "$stage_root/bin/busybox"
 chmod 0755 "$stage_root/bin/busybox"
-"$stage_root/bin/busybox" --install -s "$stage_root/bin"
+while IFS= read -r applet; do
+  [[ "$applet" == "busybox" ]] && continue
+  ln -sf busybox "$stage_root/bin/$applet"
+done < <("$stage_root/bin/busybox" --list)
 
 cat > "$stage_root/init" <<EOF
 #!/bin/sh
 set -eu
 PATH=/bin
+
+exec >/dev/console 2>&1
+echo "[initramfs] init started"
+echo "[initramfs] mounting proc, sysfs, devtmpfs, and tmpfs"
 
 mount -t proc proc /proc
 mount -t sysfs sysfs /sys
@@ -62,8 +71,21 @@ for arg in \$(cat /proc/cmdline); do
 done
 
 mkdir -p /sysroot /sysroot/var
-mount -t ext4 -o ro -L "\$root_label" /sysroot
-mount -t ext4 -o rw -L "\$state_label" /sysroot/var
+echo "[initramfs] resolving root label \$root_label"
+root_dev="\$(findfs "LABEL=\$root_label")"
+echo "[initramfs] mounting root device \$root_dev"
+mount -t ext4 -o ro "\$root_dev" /sysroot
+echo "[initramfs] resolving state label \$state_label"
+state_dev="\$(findfs "LABEL=\$state_label")"
+echo "[initramfs] mounting state device \$state_dev"
+mount -t ext4 -o rw "\$state_dev" /sysroot/var
+echo "[initramfs] mounting proc, sysfs, devtmpfs, and tmpfs in sysroot"
+mkdir -p /sysroot/proc /sysroot/sys /sysroot/dev /sysroot/run
+mount -t proc proc /sysroot/proc
+mount -t sysfs sysfs /sysroot/sys
+mount -t devtmpfs devtmpfs /sysroot/dev
+mount -t tmpfs tmpfs /sysroot/run
+echo "[initramfs] switching to /sbin/init"
 exec switch_root /sysroot /sbin/init
 EOF
 chmod 0755 "$stage_root/init"

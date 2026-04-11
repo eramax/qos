@@ -30,6 +30,7 @@ mkdir -p "$image_build_dir" "$image_output_dir"
 cp "$layout_src" "$image_build_dir/layout.json"
 cp "$slots_src" "$image_build_dir/slots.json"
 cp "$fstab_src" "$image_build_dir/fstab"
+chmod -R u+w "$image_build_dir" 2>/dev/null || true
 rm -rf "$image_build_dir/boot"
 if [[ -d "$boot_stage_dir" ]]; then
   cp -a "$boot_stage_dir" "$image_build_dir/boot"
@@ -99,6 +100,7 @@ truncate -s "$state_size" "$state_img"
 mkfs.vfat -F 32 -n QOS-EFI "$efi_img" >/dev/null
 mmd -i "$efi_img" ::/EFI ::/EFI/BOOT
 mcopy -i "$efi_img" "$boot_stage_dir/limine.conf" ::/limine.conf
+mcopy -i "$efi_img" "$boot_stage_dir/EFI/BOOT/limine.conf" ::/EFI/BOOT/limine.conf
 mcopy -i "$efi_img" "$boot_stage_dir/vmlinuz" ::/vmlinuz
 mcopy -i "$efi_img" "$boot_stage_dir/initramfs.img" ::/initramfs.img
 mcopy -i "$efi_img" "$boot_stage_dir/EFI/BOOT/BOOTX64.EFI" ::/EFI/BOOT/BOOTX64.EFI
@@ -119,6 +121,7 @@ jq -n \
 mkfs.ext4 -F -L qos-state -d "$state_root" "$state_img" >/dev/null
 
 slot_root_dir="$image_build_dir/slots/$inactive_slot/rootfs"
+chmod -R u+w "$image_build_dir/slots" 2>/dev/null || true
 rm -rf "$slot_root_dir"
 cp -a "$rootfs" "$slot_root_dir"
 
