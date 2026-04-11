@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Common helpers for repo-local build scripts.
+
+die() {
+  echo "error: $*" >&2
+  exit 1
+}
+
+require_cmd() {
+  local c
+  for c in "$@"; do
+    command -v "$c" >/dev/null 2>&1 || die "missing required command: $c"
+  done
+}
+
+_abspath_dir() {
+  # Print the canonical absolute path of a directory.
+  local d="$1"
+  (cd "$d" >/dev/null 2>&1 && pwd -P) || return 1
+}
+
+repo_root() {
+  # Resolve the repo root based on the location of this file:
+  #   scripts/lib/common.sh -> repo root is ../..
+  local lib_dir root
+  lib_dir="$(_abspath_dir "$(dirname "${BASH_SOURCE[0]}")")" || die "cannot resolve common.sh directory"
+  root="$(_abspath_dir "$lib_dir/../..")" || die "cannot resolve repo root"
+
+  # Sanity checks: these paths must exist relative to the resolved root.
+  [[ -f "$root/scripts/lib/common.sh" ]] || die "repo root sanity check failed (missing scripts/lib/common.sh): $root"
+  [[ -f "$root/build.sh" ]] || die "repo root sanity check failed (missing build.sh): $root"
+
+  # Optional: if git is present and this is a git checkout, ensure git agrees.
+  if command -v git >/dev/null 2>&1 && [[ -d "$root/.git" ]]; then
+    local git_root
+    git_root="$(git -C "$root" rev-parse --show-toplevel 2>/dev/null || true)"
+    [[ -z "$git_root" || "$git_root" == "$root" ]] || die "git root mismatch: expected $root, got $git_root"
+  fi
+
+  echo "$root"
+}
+
+ensure_dir() {
+  # Ensure a directory exists, but refuse to create paths outside the repo.
+  local target="$1"
+  [[ -n "$target" ]] || die "ensure_dir: empty path"
+
+  local root
+  root="$(repo_root)"
+
+  # Convert to absolute path if needed.
+  if [[ "$target" != /* ]]; then
+    target="$root/$target"
+  fi
+
+  case "$target" in
+    "$root" | "$root/"*) ;;
+    *) die "refusing to create directory outside repo: $target" ;;
+  esac
+
+  mkdir -p "$target"
+}
+
+_cleanup_cmds=()
+cleanup_on_exit() {
+  # Register a command (passed as a single string) to run on exit.
+  # Example: cleanup_on_exit 'rm -rf "$tmpdir"'
+  local cmd="${1:-}"
+  [[ -n "$cmd" ]] || die "cleanup_on_exit: empty command"
+  _cleanup_cmds+=("$cmd")
+
+  # Install the trap once.
+  if [[ "${#_cleanup_cmds[@]}" -eq 1 ]]; then
+    trap _run_cleanups EXIT INT TERM
+  fi
+}
+
+_run_cleanups() {
+  local i
+  # Run in reverse order (LIFO).
+  for ((i=${#_cleanup_cmds[@]}-1; i>=0; i--)); do
+    # shellcheck disable=SC2086
+    eval "${_cleanup_cmds[$i]}" || true
+  done
+}
+
