@@ -32,6 +32,7 @@ done < "$paths_file"
 
 # Immutable rootfs should expose /bin/sh via ash.
 ln -sfn ash "$rootfs/bin/sh"
+ln -sfn /usr/bin/s6-linux-init "$rootfs/sbin/init"
 
 while IFS= read -r path; do
   [[ -n "$path" && "${path#\#}" == "$path" ]] || continue
