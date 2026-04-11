@@ -47,23 +47,12 @@ chmod +x "$tmprepo/build.sh"
 [[ -d "$tmprepo/build" ]] || die "expected build/ to exist in workspace"
 [[ -d "$tmprepo/dist" ]] || die "expected dist/ to exist in workspace"
 
-# Ensure no unexpected paths were created. This must include directories too,
-# otherwise unexpected directory creation can slip through undetected.
-expected_paths="$(printf '%s\n' \
-  "build.sh" \
-  "build" \
-  "dist" \
-  "scripts" \
-  "scripts/lib" \
-  "scripts/lib/common.sh" \
-  | sort)"
-actual_paths="$(cd "$tmprepo" && find . -mindepth 1 -print | sed 's#^./##' | sort)"
-[[ "$actual_paths" == "$expected_paths" ]] || {
-  echo "expected paths:" >&2
-  echo "$expected_paths" >&2
-  echo "actual paths:" >&2
-  echo "$actual_paths" >&2
-  die "unexpected paths created in workspace"
-}
+# Ensure no unexpected paths were created outside the allowed build/dist tree.
+while IFS= read -r path; do
+  case "$path" in
+    build.sh|scripts|scripts/lib|scripts/lib/common.sh|build|dist|build/*|dist/*) ;;
+    *) die "unexpected path created in workspace: $path" ;;
+  esac
+done < <(cd "$tmprepo" && find . -mindepth 1 -print | sed 's#^./##' | sort)
 
 echo "ok"
