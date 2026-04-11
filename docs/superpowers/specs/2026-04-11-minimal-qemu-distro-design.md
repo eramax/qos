@@ -107,7 +107,7 @@ The kernel config should keep these feature groups enabled:
 - PCI and basic virtual device support
 - networking stack, TCP/IP, and DHCP-capable NIC support
 - IPv6 support
-- nftables or iptables support for host firewalling
+- nftables support for host firewalling
 - loopback and tunnel basics required by local services
 - compression and crypto only as needed by the chosen filesystem and boot path
 
@@ -236,6 +236,8 @@ The distro should stay simple at the base layer:
 - local firewall rules control inbound access
 - reverse proxying is used for HTTP exposure where needed
 - service ports should not be opened casually
+
+`nftables` is the only supported host firewall backend in the first release.
 
 The first release does not need a heavy service mesh or Kubernetes-style networking stack.
 
@@ -375,16 +377,22 @@ The build host needs a small set of tools to assemble the image reproducibly:
 - `parted`
 - `sfdisk`
 - `libarchive-tools`
+- `ovmf`
 
 If the build host is Debian or Ubuntu based, the equivalent install command is:
 
 ```bash
-sudo apt install git curl ca-certificates bash python3 jq mkosi qemu-system-x86 qemu-utils squashfs-tools xorriso mtools dosfstools e2fsprogs parted util-linux libarchive-tools
+sudo apt install git curl ca-certificates bash python3 jq mkosi qemu-system-x86 qemu-utils squashfs-tools xorriso mtools dosfstools e2fsprogs parted util-linux libarchive-tools ovmf
 ```
 
 The distro itself should still use Alpine packages directly for the target image. The `apt` command is only for the build host.
 
 `Limine` should be installed separately from upstream release artifacts or built from source if it is not available in the host distribution repositories.
+
+### Host UEFI Firmware
+
+Use `ovmf` as the QEMU UEFI firmware package on the build host.
+It is the standard Debian/Ubuntu package for OVMF-based UEFI boot testing and keeps the host prerequisites simpler than maintaining a separate firmware build.
 
 ## QEMU Test Workflow
 
@@ -448,6 +456,8 @@ The update flow should use A/B slots:
 5. Reboot into the new image.
 6. Confirm the boot and basic health checks.
 7. Roll back automatically to the previous slot if the new boot fails.
+
+The slot switch should be driven by a small shell script so the update flow stays auditable and easy to reproduce.
 
 ### Mutable State During Updates
 
