@@ -338,6 +338,14 @@ The image build pipeline should be implemented as one top-level script with a pr
 7. Install `Limine`.
 8. Produce the final bootable artifact for QEMU.
 
+The build process must not modify the host machine outside the workspace and temporary build outputs it creates.
+It should:
+
+- avoid changing host packages or persistent host configuration
+- avoid mounting or editing host disks
+- avoid writing outside the build output directory and documented cache locations
+- clean up temporary artifacts on failure where practical
+
 ### Tooling Choice
 
 Preferred tooling:
@@ -393,6 +401,18 @@ The distro itself should still use Alpine packages directly for the target image
 
 Use `ovmf` as the QEMU UEFI firmware package on the build host.
 It is the standard Debian/Ubuntu package for OVMF-based UEFI boot testing and keeps the host prerequisites simpler than maintaining a separate firmware build.
+
+### Host Safety
+
+The build script must be safe to run repeatedly on the same host.
+
+It should treat the host as read-mostly infrastructure:
+
+- no system-level reconfiguration
+- no persistent changes to shell profiles or login settings
+- no direct modification of `/etc` on the host
+- no writing to global package caches unless explicitly documented
+- no destructive operations on block devices except the temporary image artifact it creates
 
 ## QEMU Test Workflow
 
