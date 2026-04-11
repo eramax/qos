@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+set -euo pipefail
+IFS=$'\n\t'
+
+die() {
+  echo "error: $*" >&2
+  exit 1
+}
+
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+repo_root="$(cd "$here/.." && pwd -P)"
+
+for script in scripts/build-rootfs.sh scripts/install-services.sh; do
+  [[ -x "$repo_root/$script" ]] || die "missing $script"
+done
+
+stage_base="$(mktemp -d "$repo_root/build/task5.XXXXXX")"
+cleanup() {
+  chmod -R u+w "$stage_base" 2>/dev/null || true
+  rm -rf "$stage_base"
+}
+trap cleanup EXIT INT TERM
+
+rootfs_dir="$stage_base/rootfs"
+
+ROOTFS_SKIP_APK=1 ROOTFS_DIR="$rootfs_dir" "$repo_root/scripts/build-rootfs.sh" >/dev/null
+ROOTFS_DIR="$rootfs_dir" "$repo_root/scripts/install-services.sh" >/dev/null
+
+[[ -f "$rootfs_dir/etc/dropbear/dropbear.conf" ]] || die "missing dropbear config"
+[[ -f "$rootfs_dir/etc/nftables/nftables.conf" ]] || die "missing nftables config"
+[[ -f "$rootfs_dir/etc/network/interfaces.dhcp" ]] || die "missing DHCP config"
+[[ -x "$rootfs_dir/etc/s6/service-tree/networking/run" ]] || die "missing networking run script"
+[[ -x "$rootfs_dir/etc/s6/service-tree/dropbear/run" ]] || die "missing dropbear run script"
+[[ -x "$rootfs_dir/etc/s6/service-tree/nftables/run" ]] || die "missing nftables run script"
+[[ -f "$rootfs_dir/etc/s6/s6-rc.d/networking/type" ]] || die "missing networking s6-rc type"
+[[ -f "$rootfs_dir/etc/s6/s6-rc.d/dropbear/type" ]] || die "missing dropbear s6-rc type"
+[[ -f "$rootfs_dir/etc/s6/s6-rc.d/nftables/type" ]] || die "missing nftables s6-rc type"
+
+grep -qxF 'DROPBEAR_EXTRA_ARGS="-s -j -k"' "$rootfs_dir/etc/dropbear/dropbear.conf" || die "dropbear config is not key-only"
+grep -qxF 'auto eth0' "$rootfs_dir/etc/network/interfaces.dhcp" || die "network config missing auto eth0"
+grep -qxF 'iface eth0 inet dhcp' "$rootfs_dir/etc/network/interfaces.dhcp" || die "network config missing DHCP stanza"
+grep -q 'udhcpc' "$rootfs_dir/etc/s6/service-tree/networking/run" || die "networking service does not use DHCP client"
+grep -q 'dropbear -F -E' "$rootfs_dir/etc/s6/service-tree/dropbear/run" || die "dropbear service not foregrounded"
+grep -q 'nft -f /etc/nftables/nftables.conf' "$rootfs_dir/etc/s6/service-tree/nftables/run" || die "nftables service does not load the firewall rules"
+grep -q 'table inet filter' "$rootfs_dir/etc/nftables/nftables.conf" || die "nftables config missing inet filter table"
+! grep -q 'iptables' "$rootfs_dir/etc/nftables/nftables.conf" || die "nftables config must not mention iptables"
+
+if find "$rootfs_dir/etc" -perm -u=w -print | grep -q .; then
+  die "/etc should be hardened back to read-only after staging"
+fi
+
+echo "ok"
+

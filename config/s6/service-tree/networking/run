@@ -1,0 +1,5 @@
+#!/bin/sh
+set -eu
+
+# Bring up the primary interface with DHCP.
+exec udhcpc -i eth0 -q -f
