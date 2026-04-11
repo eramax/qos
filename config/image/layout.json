@@ -14,20 +14,23 @@
       "filesystem": "ext4",
       "mount": "/",
       "slot": "A",
-      "immutable": true
+      "immutable": true,
+      "size": "1G"
     },
     {
       "name": "root-b",
       "filesystem": "ext4",
       "mount": "/",
       "slot": "B",
-      "immutable": true
+      "immutable": true,
+      "size": "1G"
     },
     {
       "name": "state",
       "filesystem": "ext4",
       "mount": "/var",
-      "mutable": true
+      "mutable": true,
+      "size": "256M"
     }
   ]
 }

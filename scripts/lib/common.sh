@@ -97,6 +97,29 @@ ensure_dir() {
   mkdir -p -- "$canon"
 }
 
+manifest_path() {
+  local root
+  root="$(repo_root)"
+  echo "${BUILD_MANIFEST_FILE:-$root/build/build.manifest}"
+}
+
+manifest_add() {
+  local line="${1:-}"
+  [[ -n "$line" ]] || die "manifest_add: empty line"
+  local path
+  path="$(manifest_path)"
+  mkdir -p "$(dirname "$path")"
+  printf '%s\n' "$line" >> "$path"
+}
+
+download_file() {
+  local url="${1:-}"
+  local dest="${2:-}"
+  [[ -n "$url" && -n "$dest" ]] || die "download_file: usage url dest"
+  mkdir -p "$(dirname "$dest")"
+  curl -fsSL "$url" -o "$dest"
+}
+
 _cleanup_cmds=()
 cleanup_on_exit() {
   # Register a command (passed as a single string) to run on exit.

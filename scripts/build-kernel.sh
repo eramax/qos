@@ -9,9 +9,15 @@ source "$script_dir/lib/common.sh"
 root="$(repo_root)"
 kernel_config="${KERNEL_CONFIG:-$root/config/kernel/x86_64.config}"
 kernel_build_dir="${KERNEL_BUILD_DIR:-$root/build/kernel}"
+kernel_version_file="${KERNEL_VERSION_FILE:-$root/config/kernel/version}"
+cache_root="${KERNEL_CACHE_DIR:-$root/build/cache/kernel}"
+kernel_version="${KERNEL_VERSION:-}"
+tool_root="$cache_root/tooling"
+tool_prefix="$tool_root/prefix"
 
 [[ -f "$kernel_config" ]] || die "missing kernel config: $kernel_config"
 ensure_dir "$kernel_build_dir"
+mkdir -p "$cache_root"
 
 cp "$kernel_config" "$kernel_build_dir/kernel.config"
 
@@ -22,11 +28,84 @@ if [[ "${KERNEL_BUILD_MOCK:-0}" == "1" ]]; then
   exit 0
 fi
 
-if [[ -z "${KERNEL_SRC:-}" ]]; then
-  die "KERNEL_SRC is required for a real kernel build (set KERNEL_BUILD_MOCK=1 for scaffold/test mode)"
+require_cmd curl tar sha256sum make bc perl
+mkdir -p "$tool_root"
+
+bootstrap_gnu_tool() {
+  local name="$1"
+  local version="$2"
+  local url="$3"
+  local configure_args="${4:-}"
+  local src_tar="$tool_root/$name-$version.tar.xz"
+  local src_dir="$tool_root/src/$name-$version"
+  local build_dir="$tool_root/build/$name-$version"
+
+  if command -v "$name" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  manifest_add "source: $name $url"
+  if [[ ! -f "$src_tar" ]]; then
+    download_file "$url" "$src_tar"
+  fi
+  manifest_add "download: $url sha256=$(sha256sum "$src_tar" | awk '{print $1}')"
+
+  if [[ ! -d "$src_dir" ]]; then
+    mkdir -p "$tool_root/src"
+    tar -xf "$src_tar" -C "$tool_root/src"
+  fi
+
+  mkdir -p "$build_dir"
+  (
+    cd "$src_dir"
+    if [[ ! -x configure ]]; then
+      die "missing configure script in $src_dir"
+    fi
+    CFLAGS="${BUILD_TOOL_CFLAGS:--std=gnu11}" \
+    PATH="$tool_prefix/bin:$PATH" ./configure --prefix="$tool_prefix" --disable-nls $configure_args >/dev/null
+    CFLAGS="${BUILD_TOOL_CFLAGS:--std=gnu11}" \
+    PATH="$tool_prefix/bin:$PATH" make -j"${BUILD_TOOL_JOBS:-1}" >/dev/null
+    CFLAGS="${BUILD_TOOL_CFLAGS:--std=gnu11}" \
+    PATH="$tool_prefix/bin:$PATH" make install >/dev/null
+  )
+}
+
+bootstrap_gnu_tool m4 1.4.19 https://ftp.gnu.org/gnu/m4/m4-1.4.19.tar.xz
+bootstrap_gnu_tool flex 2.6.4 https://github.com/westes/flex/releases/download/v2.6.4/flex-2.6.4.tar.gz
+bootstrap_gnu_tool bison 3.8.2 https://ftp.gnu.org/gnu/bison/bison-3.8.2.tar.xz
+
+if [[ -z "$kernel_version" ]]; then
+  [[ -f "$kernel_version_file" ]] || die "missing kernel version file: $kernel_version_file"
+  kernel_version="$(tr -d '[:space:]' < "$kernel_version_file")"
+fi
+[[ -n "$kernel_version" ]] || die "kernel version is empty"
+
+kernel_url="https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-$kernel_version.tar.xz"
+kernel_tar="$cache_root/linux-$kernel_version.tar.xz"
+kernel_src="$cache_root/linux-$kernel_version"
+kernel_out="$kernel_build_dir/build"
+
+manifest_add "command: scripts/build-kernel.sh version=$kernel_version"
+manifest_add "source: kernel $kernel_url"
+
+if [[ ! -f "$kernel_tar" ]]; then
+  download_file "$kernel_url" "$kernel_tar"
+fi
+manifest_add "download: $kernel_url sha256=$(sha256sum "$kernel_tar" | awk '{print $1}')"
+
+if [[ ! -d "$kernel_src" ]]; then
+  tar -xJf "$kernel_tar" -C "$cache_root"
 fi
 
-require_cmd make
+mkdir -p "$kernel_out"
+cp "$kernel_config" "$kernel_out/.config"
 
-die "real kernel compilation is not wired yet; set KERNEL_BUILD_MOCK=1 for scaffold/test mode"
+PATH="$tool_prefix/bin:$PATH" "$kernel_src/scripts/kconfig/merge_config.sh" -m -O "$kernel_out" "$kernel_config" >/dev/null
 
+PATH="$tool_prefix/bin:$PATH" make -C "$kernel_src" O="$kernel_out" olddefconfig >/dev/null
+PATH="$tool_prefix/bin:$PATH" make -C "$kernel_src" O="$kernel_out" -j"${BUILD_KERNEL_JOBS:-$(nproc)}" bzImage >/dev/null
+
+cp "$kernel_out/arch/x86/boot/bzImage" "$kernel_build_dir/vmlinuz"
+cp "$kernel_out/System.map" "$kernel_build_dir/System.map"
+
+echo "kernel build complete: $kernel_build_dir/vmlinuz"
