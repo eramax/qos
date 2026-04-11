@@ -79,6 +79,7 @@ The kernel should be stripped but not over-stripped. It should keep the features
 - networking
 - virtio drivers for QEMU
 - future real hardware support
+- IPv4 and IPv6
 - `io_uring`
 - `futex` and shared-memory primitives
 - Unix domain sockets
@@ -105,6 +106,7 @@ The kernel config should keep these feature groups enabled:
 - virtio block, network, and console drivers for QEMU
 - PCI and basic virtual device support
 - networking stack, TCP/IP, and DHCP-capable NIC support
+- IPv6 support
 - nftables or iptables support for host firewalling
 - loopback and tunnel basics required by local services
 - compression and crypto only as needed by the chosen filesystem and boot path
@@ -265,6 +267,7 @@ The first image should be capable of running a small HTTP server cleanly without
 Required runtime support includes:
 
 - network stack support for TCP/IP
+- IPv4 and IPv6 support
 - loopback networking
 - virtio network support in QEMU
 - async I/O support through `io_uring`
