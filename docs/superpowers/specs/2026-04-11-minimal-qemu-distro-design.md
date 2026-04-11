@@ -79,6 +79,11 @@ The kernel should be stripped but not over-stripped. It should keep the features
 - networking
 - virtio drivers for QEMU
 - future real hardware support
+- `io_uring`
+- `futex` and shared-memory primitives
+- Unix domain sockets
+- `eventfd`
+- `memfd_create`
 
 The first kernel target is QEMU, but the config should avoid QEMU-only assumptions when possible.
 
@@ -213,6 +218,21 @@ The first release does not need a heavy service mesh or Kubernetes-style network
 ### App Model
 
 Applications are ordinary native Linux services managed by `s6`.
+
+### Performance Primitives
+
+Applications should be able to use the kernel's fast I/O and IPC primitives directly.
+
+Required primitives include:
+
+- `io_uring` for asynchronous file and socket I/O
+- `futex` for synchronization
+- shared memory for high-throughput local IPC
+- Unix domain sockets for local service communication
+- `eventfd` for lightweight wakeups
+- `memfd_create` for in-memory file-backed handoff
+
+The distro should not treat `io_uring` as an IPC replacement. It is an async I/O path, while IPC should use the kernel primitives best suited to the communication pattern.
 
 ### Installation Layout
 
