@@ -374,16 +374,17 @@ The build host needs a small set of tools to assemble the image reproducibly:
 - `e2fsprogs`
 - `parted`
 - `sfdisk`
-- `limine`
 - `libarchive-tools`
 
 If the build host is Debian or Ubuntu based, the equivalent install command is:
 
 ```bash
-sudo apt install git curl ca-certificates bash python3 jq mkosi qemu-system-x86 qemu-utils squashfs-tools xorriso mtools dosfstools e2fsprogs parted util-linux limine libarchive-tools
+sudo apt install git curl ca-certificates bash python3 jq mkosi qemu-system-x86 qemu-utils squashfs-tools xorriso mtools dosfstools e2fsprogs parted util-linux libarchive-tools
 ```
 
 The distro itself should still use Alpine packages directly for the target image. The `apt` command is only for the build host.
+
+`Limine` should be installed separately from upstream release artifacts or built from source if it is not available in the host distribution repositories.
 
 ## QEMU Test Workflow
 
