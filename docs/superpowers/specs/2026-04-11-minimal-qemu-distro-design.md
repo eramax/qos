@@ -1,0 +1,316 @@
+# Minimal UEFI Linux Distro Design
+
+## Summary
+
+This document defines a small, fast, reproducible Linux distribution for QEMU x86_64 first, with a path to real hardware later. The distro is Alpine-based, uses `apk` directly, and is optimized for a minimal server footprint rather than desktop use.
+
+Core decisions:
+
+- UEFI only boot
+- `Limine` bootloader
+- `ext4` root filesystem
+- mostly immutable rootfs
+- writable state isolated under `/var`
+- `s6` and `s6-rc` for init and supervision
+- `apk-tools` and Alpine packages directly
+- `musl` userspace
+- `Dropbear` for SSH access
+- `ash` as the base shell
+- rolling release model
+- one top-level script builds the image
+
+## Goals
+
+- Boot reliably in QEMU x86_64 with UEFI.
+- Keep the base system small and easy to audit.
+- Use Alpine packages directly instead of inventing a separate package ecosystem.
+- Keep the runtime mostly immutable so updates are controlled and rollback-friendly.
+- Make the whole image reproducible from one top-level build script.
+- Keep the system suitable for future real hardware support without overfitting to QEMU.
+
+## Non-Goals
+
+- No Kubernetes or K3s.
+- No WASM runtime in the base system.
+- No Docker or Podman-based app model.
+- No desktop environment.
+- No Rust/Zig language preference in the base spec.
+
+## System Architecture
+
+The runtime stack is:
+
+1. Firmware boots into `Limine`.
+2. `Limine` loads the Linux kernel and initramfs.
+3. The kernel mounts the root filesystem.
+4. `s6` becomes PID 1.
+5. `s6-rc` brings up system services in dependency order.
+6. `Dropbear` provides remote administration.
+7. Application services run as supervised `s6` services.
+
+The distro is intentionally small. Most system behavior should be visible through:
+
+- service directories
+- package manifests
+- kernel config
+- the build script
+
+## Boot Strategy
+
+### Boot Mode
+
+- UEFI only.
+- BIOS support is not a requirement for the first release.
+
+### Bootloader
+
+`Limine` is the bootloader of record because it is modern, lightweight, and independent of systemd.
+
+### Kernel
+
+The kernel should be stripped but not over-stripped. It should keep the features required for:
+
+- UEFI boot
+- `ext4`
+- `tmpfs`
+- `proc`, `sysfs`, `devtmpfs`
+- `cgroups`
+- namespaces
+- networking
+- virtio drivers for QEMU
+- future real hardware support
+
+The first kernel target is QEMU, but the config should avoid QEMU-only assumptions when possible.
+
+## Filesystem Layout
+
+### Root Filesystem
+
+- `/` is `ext4`.
+- The root filesystem is mostly immutable.
+- Runtime state lives outside the base root image.
+
+### Writable State
+
+Persistent mutable data goes under `/var`, including:
+
+- logs
+- service state
+- SSH host keys if not provisioned at build time
+- DHCP lease state if needed
+- package state or caches if the design requires them
+
+`/etc` should remain part of the immutable image. Machine-specific mutable state should not be stored there.
+
+### Log Policy
+
+- Logs should be persistent in `/var/log`.
+- Logging should be simple and service-scoped.
+- The base image should not depend on a heavy logging stack.
+
+### Shell and Base Utilities
+
+- `/bin/sh` should be `ash`.
+- `bash` should not be part of the default image.
+- `uutils/coreutils` should replace GNU coreutils where practical.
+
+## Package and Rootfs Strategy
+
+### Package Source
+
+The distro uses Alpine packages directly.
+
+### Build Input
+
+The build script should consume:
+
+- Alpine repository configuration
+- a package manifest
+- a kernel config
+- a Limine config
+- an initramfs config
+- a rootfs layout definition
+
+### Reproducibility
+
+The build must be reproducible from one top-level script. To keep that feasible while still using Alpine packages directly, the build should:
+
+- pin package versions or repository snapshots
+- record package names and versions in a manifest
+- avoid pulling untracked dependencies during the build
+- fail closed if repository metadata changes unexpectedly
+
+The script should build the image only. It should not publish repositories or manage package mirrors.
+
+## Init and Service Model
+
+### Init System
+
+`s6` and `s6-rc` are the process supervision and service orchestration layer.
+
+### Service Principles
+
+- Each service should have a single responsibility.
+- Services should restart predictably on failure.
+- Dependencies should be explicit.
+- Service configuration should be stored in files, not hidden in ad hoc shell scripts.
+
+### Service Types
+
+The initial service set should include:
+
+- basic system bootstrap
+- networking
+- SSH
+- logging
+- time synchronization if needed
+- application services
+
+### Shell Policy for Services
+
+- Service scripts should be POSIX-compatible.
+- `ash` should be used as the default shell for shell-based helpers.
+
+## Administration
+
+### SSH
+
+`Dropbear` is the SSH daemon.
+
+Rationale:
+
+- smaller than OpenSSH
+- suitable for a minimal server image
+- enough for key-based administrative access
+
+### Access Policy
+
+The default stance should be conservative:
+
+- key-based authentication preferred
+- password login disabled unless explicitly required
+- no unnecessary remote login surface
+
+## Networking
+
+### Addressing
+
+- DHCP should be the default network mode.
+- Static addressing can be supported later as a configuration option, not the default.
+
+### Firewall and Exposure
+
+The distro should stay simple at the base layer:
+
+- local firewall rules control inbound access
+- reverse proxying is used for HTTP exposure where needed
+- service ports should not be opened casually
+
+The first release does not need a heavy service mesh or Kubernetes-style networking stack.
+
+## Applications
+
+### App Model
+
+Applications are ordinary native Linux services managed by `s6`.
+
+### App Language Policy
+
+There is no enforced Rust or Zig-only policy in the current spec.
+
+The distro should stay language-neutral at the base level while still favoring:
+
+- small binaries
+- low startup overhead
+- reproducible builds
+- minimal runtime dependencies
+
+### App Isolation
+
+The system should isolate apps by:
+
+- dedicated service users
+- explicit file permissions
+- service-specific environment files
+- service-specific state directories under `/var`
+
+## Image Build Pipeline
+
+The image build pipeline should be implemented as one top-level script with a predictable sequence:
+
+1. Validate inputs and tool availability.
+2. Fetch or verify the package manifest and repository metadata.
+3. Build or assemble the kernel and initramfs.
+4. Create the rootfs staging tree from Alpine packages.
+5. Install the base system, services, and configuration.
+6. Assemble the disk image.
+7. Install `Limine`.
+8. Produce the final bootable artifact for QEMU.
+
+### Tooling Choice
+
+Preferred tooling:
+
+- `mkosi` for image assembly
+- Alpine package staging for the rootfs
+- `mkinitfs` for initramfs generation
+
+This split keeps each part focused:
+
+- package manager handles packages
+- initramfs tool handles early boot
+- image builder handles disk layout
+
+### Output Artifact
+
+The first release should emit a single raw disk image as the canonical artifact for QEMU. Additional formats can be added later if needed.
+
+## QEMU Test Workflow
+
+The first validation target is QEMU x86_64 with UEFI.
+
+The test workflow should verify:
+
+- firmware boots the image
+- kernel reaches init
+- `s6` starts cleanly
+- networking comes up via DHCP
+- `Dropbear` is reachable
+- the root filesystem mounts correctly
+- the image behaves correctly across reboot
+
+## Hardware Expansion Path
+
+The design should remain portable to real hardware later by avoiding:
+
+- hardcoded QEMU-only drivers
+- QEMU-only storage assumptions
+- bootloader assumptions that prevent normal UEFI hardware boot
+
+The kernel and filesystem layout should stay generic enough that future hardware support is mostly a matter of adding drivers and validating firmware behavior.
+
+## Security Model
+
+Security is based on minimizing the base system and reducing mutable state:
+
+- minimal package set
+- UEFI-only boot path
+- limited SSH surface
+- read-only or mostly read-only rootfs
+- writable state only where needed
+- explicit service users
+
+This is not a full sandboxing platform. It is a small server OS with simple, auditable controls.
+
+## Acceptance Criteria
+
+The first release is complete when:
+
+- the image is reproducible from one script
+- the image boots in QEMU x86_64 UEFI mode
+- `s6` starts as PID 1
+- DHCP networking works
+- `Dropbear` is reachable
+- the base filesystem is mostly immutable
+- Alpine packages are installed directly
+- the system can be updated in a rolling fashion
