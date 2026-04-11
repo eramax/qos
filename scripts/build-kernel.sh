@@ -103,7 +103,7 @@ cp "$kernel_config" "$kernel_out/.config"
 PATH="$tool_prefix/bin:$PATH" "$kernel_src/scripts/kconfig/merge_config.sh" -m -O "$kernel_out" "$kernel_config" >/dev/null
 
 PATH="$tool_prefix/bin:$PATH" make -C "$kernel_src" O="$kernel_out" olddefconfig >/dev/null
-PATH="$tool_prefix/bin:$PATH" make -C "$kernel_src" O="$kernel_out" -j"${BUILD_KERNEL_JOBS:-$(nproc)}" bzImage >/dev/null
+PATH="$tool_prefix/bin:$PATH" make -C "$kernel_src" O="$kernel_out" -j"${BUILD_KERNEL_JOBS:-1}" bzImage >/dev/null
 
 cp "$kernel_out/arch/x86/boot/bzImage" "$kernel_build_dir/vmlinuz"
 cp "$kernel_out/System.map" "$kernel_build_dir/System.map"

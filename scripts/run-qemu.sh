@@ -30,10 +30,17 @@ fi
 require_cmd qemu-system-x86_64
 
 ovmf_code="${OVMF_CODE:-}"
+ovmf_vars="${OVMF_VARS:-}"
 if [[ -z "$ovmf_code" ]]; then
   for candidate in \
-    /usr/share/OVMF/OVMF_CODE.fd \
+  /usr/share/OVMF/OVMF_CODE.fd \
+    /usr/share/OVMF/OVMF_CODE_4M.fd \
+    /usr/share/OVMF/OVMF_CODE_4M.secboot.fd \
+    /usr/share/OVMF/OVMF_CODE_4M.secboot.strictnx.fd \
+    /usr/share/OVMF/OVMF_CODE_4M.ms.fd \
+    /usr/share/OVMF/OVMF_CODE_4M.snakeoil.fd \
     /usr/share/ovmf/OVMF_CODE.fd \
+    /usr/share/ovmf/OVMF.fd \
     /usr/share/edk2/ovmf/OVMF_CODE.fd
   do
     [[ -f "$candidate" ]] && ovmf_code="$candidate" && break
@@ -41,13 +48,30 @@ if [[ -z "$ovmf_code" ]]; then
 fi
 
 [[ -n "$ovmf_code" && -f "$ovmf_code" ]] || die "unable to locate OVMF_CODE.fd"
+if [[ -z "$ovmf_vars" ]]; then
+  for candidate in \
+    /usr/share/OVMF/OVMF_VARS.fd \
+    /usr/share/OVMF/OVMF_VARS_4M.fd \
+    /usr/share/OVMF/OVMF_VARS_4M.ms.fd \
+    /usr/share/OVMF/OVMF_VARS_4M.snakeoil.fd
+  do
+    [[ -f "$candidate" ]] && ovmf_vars="$candidate" && break
+  done
+fi
+
+[[ -n "$ovmf_vars" && -f "$ovmf_vars" ]] || die "unable to locate OVMF_VARS.fd"
+
+ovmf_vars_runtime="${QEMU_OVMF_VARS_RUNTIME:-$root/build/qemu/OVMF_VARS.fd}"
+mkdir -p "$(dirname "$ovmf_vars_runtime")"
+cp "$ovmf_vars" "$ovmf_vars_runtime"
 
 qemu-system-x86_64 \
   -machine q35,accel=tcg \
   -cpu max \
-  -m "${QEMU_MEMORY:-512M}" \
-  -bios "$ovmf_code" \
-  -drive file="$image_path",if=virtio,format=raw \
+  -m "${QEMU_MEMORY:-256M}" \
+  -drive if=pflash,format=raw,unit=0,readonly=on,file="$ovmf_code" \
+  -drive if=pflash,format=raw,unit=1,file="$ovmf_vars_runtime" \
+  -drive if=none,file="$image_path",id=bootdisk,format=raw \
+  -device virtio-blk-pci,drive=bootdisk,bootindex=1 \
   -serial file:"$log_file" \
   -display none
-
