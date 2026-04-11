@@ -378,6 +378,16 @@ The design should remain portable to real hardware later by avoiding:
 
 The kernel and filesystem layout should stay generic enough that future hardware support is mostly a matter of adding drivers and validating firmware behavior.
 
+### System and Vendor Separation
+
+The distro should treat `system` and `vendor` as separate build/package concerns even if they share the same final image at first.
+
+- `system` includes the immutable base OS, bootloader integration, init, package manager, supervision, and core services.
+- `vendor` includes firmware, microcode, and hardware-specific support packages that may vary across machines.
+
+For the first release, this separation should be a packaging boundary, not a separate partition boundary.
+That keeps the design simple while preserving a future path to hardware-specific layers or update channels.
+
 ## Security Model
 
 Security is based on minimizing the base system and reducing mutable state:
