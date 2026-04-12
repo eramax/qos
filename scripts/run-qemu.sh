@@ -86,6 +86,7 @@ qemu-system-x86_64 \
   -machine q35,accel=kvm:tcg \
   -cpu max \
   -m "${QEMU_MEMORY:-1G}" \
+  -smp "${QEMU_CPUS:-2}" \
   -drive if=pflash,format=raw,unit=0,readonly=on,file="$ovmf_code" \
   -drive if=pflash,format=raw,unit=1,file="$ovmf_vars_runtime" \
   -drive if=none,file="$image_path",id=bootdisk,format=raw \

@@ -7,6 +7,7 @@ BUILD_TOOL_JOBS ?= 15
 BUILD_LOG ?= build/logs/build.log
 QEMU_IMAGE ?= dist/qos-x86_64.raw
 QEMU_MEMORY ?= 1G
+QEMU_CPUS ?= 2
 QEMU_HOSTFWD_PORT ?= none
 
 ROOT := $(shell pwd -P)
@@ -65,7 +66,7 @@ image:
 boot: qemu
 
 qemu:
-	@QEMU_MEMORY=$(QEMU_MEMORY) QEMU_HOSTFWD_PORT=$(QEMU_HOSTFWD_PORT) scripts/boot-image.sh --qemu $(QEMU_IMAGE)
+	@QEMU_MEMORY=$(QEMU_MEMORY) QEMU_CPUS=$(QEMU_CPUS) QEMU_HOSTFWD_PORT=$(QEMU_HOSTFWD_PORT) scripts/boot-image.sh --qemu $(QEMU_IMAGE)
 
 smoke:
 	@scripts/boot-image.sh --smoke $(QEMU_IMAGE)

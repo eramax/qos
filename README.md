@@ -37,6 +37,8 @@ make build
 
 Host build prerequisites for the real build include `help2man` and GNU `indent` in addition to the existing toolchain.
 
+`make qemu` defaults to 1 GiB of RAM and 2 CPU cores.
+
 Clean build from scratch:
 
 ```bash
