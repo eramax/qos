@@ -19,7 +19,7 @@ fi
 
 require_cmd jq truncate sha256sum cp rm mkdir
 if [[ "${BUILD_MOCK:-1}" != "1" ]]; then
-  require_cmd curl tar xz cpio dd sgdisk mkfs.ext4 mkfs.vfat mcopy mmd git busybox
+  require_cmd curl tar xz cpio dd sgdisk mkfs.ext4 mkfs.vfat mcopy mmd git busybox help2man indent
 fi
 
 ensure_dir "$ROOT/build"

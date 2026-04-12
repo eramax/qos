@@ -12,6 +12,8 @@ repo_root="$(cd "$here/.." && pwd -P)"
 
 [[ -f "$repo_root/build.sh" ]] || die "missing build.sh at repo root"
 [[ -f "$repo_root/scripts/lib/common.sh" ]] || die "missing scripts/lib/common.sh"
+grep -qF 'help2man' "$repo_root/build.sh" || die "build.sh must require host help2man"
+grep -qF 'indent' "$repo_root/build.sh" || die "build.sh must require GNU indent"
 
 tmprepo="$(mktemp -d)"
 outside="$(mktemp -d)"

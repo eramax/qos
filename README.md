@@ -35,6 +35,8 @@ Use the Makefile:
 make build
 ```
 
+Host build prerequisites for the real build include `help2man` and GNU `indent` in addition to the existing toolchain.
+
 Clean build from scratch:
 
 ```bash
