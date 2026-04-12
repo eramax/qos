@@ -105,6 +105,14 @@ ovmf_vars_runtime="${QEMU_OVMF_VARS_RUNTIME:-$root/build/qemu/OVMF_VARS.fd}"
 mkdir -p "$(dirname "$ovmf_vars_runtime")"
 cp "$ovmf_vars" "$ovmf_vars_runtime"
 
+# Create extra 1GB disk for qos-install testing
+extra_disk="${QEMU_EXTRA_DISK:-$root/build/qemu/extra-disk.raw}"
+extra_disk_size="${QEMU_EXTRA_DISK_SIZE:-1G}"
+mkdir -p "$(dirname "$extra_disk")"
+if [[ ! -f "$extra_disk" ]]; then
+  truncate -s "$extra_disk_size" "$extra_disk"
+fi
+
 hostfwd_port="${QEMU_HOSTFWD_PORT:-2222}"
 
 if [[ "$serial_mode" == "file" ]]; then
@@ -145,11 +153,12 @@ qemu-system-x86_64 \
   -drive if=pflash,format=raw,unit=0,readonly=on,file="$ovmf_code" \
   -drive if=pflash,format=raw,unit=1,file="$ovmf_vars_runtime" \
   -drive if=none,file="$image_path",id=bootdisk,format=raw \
-  -device virtio-blk-pci,drive=bootdisk,bootindex=1 \
+  -device virtio-blk-pci,drive=bootdisk,bootindex=0 \
   "${qemu_netdev_arg[@]}" \
   -device virtio-net-pci,netdev=net0 \
-  -chardev socket,id=qga,path="$root/build/qemu/qga.sock",server,nowait \
+  -chardev socket,id=qga,path="$root/build/qemu/qga.sock",server=on,wait=off \
   -device virtio-serial-pci \
   -device virtserialport,chardev=qga,name=org.qemu.guest_agent.0 \
+  -drive if=none,file="$extra_disk",format=raw,if=virtio \
   "${qemu_serial_arg[@]}" \
   -display none

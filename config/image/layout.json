@@ -2,13 +2,15 @@
   "boot_mode": "uefi",
   "disk_format": "raw",
   "partition_table": "gpt",
-  "image_size": "1G",
+  "image_size": "256M",
+  "description": "Optimized 256MB base image with 64MB EFI partition for reliable UEFI boot",
   "partitions": [
     {
       "name": "efi",
       "filesystem": "vfat",
       "mount": "/boot/efi",
-      "size": "64M"
+      "size": "64M",
+      "description": "EFI partition with Limine bootloader, kernel, initramfs"
     },
     {
       "name": "root-a",
@@ -16,7 +18,8 @@
       "mount": "/",
       "slot": "A",
       "immutable": true,
-      "size": "48M"
+      "size": "48M",
+      "description": "Immutable root filesystem slot A"
     },
     {
       "name": "root-b",
@@ -24,14 +27,22 @@
       "mount": "/",
       "slot": "B",
       "immutable": true,
-      "size": "48M"
+      "size": "48M",
+      "description": "Immutable root filesystem slot B (for OTA updates)"
     },
     {
       "name": "state",
       "filesystem": "ext4",
       "mount": "/var",
       "mutable": true,
-      "size": "auto"
+      "size": "auto",
+      "description": "State partition (auto-sized from remaining space, expandable via qos-install)"
     }
-  ]
+  ],
+  "install_tool": "qos-install",
+  "flash_instructions": {
+    "direct_flash": "dd if=qos-x86_64.raw of=/dev/sdX bs=4M status=progress",
+    "install_to_disk": "qos-install --auto /dev/sdX",
+    "note": "Image is 256MB. Use qos-install to expand to larger disk with proper partitioning."
+  }
 }

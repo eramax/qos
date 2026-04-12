@@ -100,6 +100,13 @@ fi
 mkdir -p "$kernel_out"
 cp "$kernel_config" "$kernel_out/.config"
 
+# Skip kernel build if already built with same config
+if [[ -f "$kernel_build_dir/vmlinuz" && -f "$kernel_build_dir/System.map" ]]; then
+  echo "kernel already built (skip rebuild)"
+  echo "kernel build complete: $kernel_build_dir/vmlinuz"
+  exit 0
+fi
+
 PATH="$tool_prefix/bin:$PATH" "$kernel_src/scripts/kconfig/merge_config.sh" -m -O "$kernel_out" "$kernel_config" >/dev/null
 
 PATH="$tool_prefix/bin:$PATH" make -C "$kernel_src" O="$kernel_out" olddefconfig >/dev/null

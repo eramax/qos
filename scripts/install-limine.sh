@@ -47,6 +47,14 @@ cp "$limine_config" "$limine_stage_dir/limine.conf"
 cp "$limine_config" "$limine_stage_dir/EFI/BOOT/limine.conf"
 cp "$kernel_dir/vmlinuz" "$limine_stage_dir/vmlinuz"
 cp "$initramfs_dir/initramfs.img" "$limine_stage_dir/initramfs.img"
+
+# Skip copying EFI binaries if already staged
+if [[ -f "$limine_stage_dir/EFI/BOOT/BOOTX64.EFI" ]]; then
+  echo "limine already staged (skip rebuild)"
+  echo "limine stage complete: $limine_stage_dir"
+  exit 0
+fi
+
 cp "$limine_src/BOOTX64.EFI" "$limine_stage_dir/EFI/BOOT/BOOTX64.EFI"
 cp "$limine_src/BOOTIA32.EFI" "$limine_stage_dir/EFI/BOOT/BOOTIA32.EFI" 2>/dev/null || true
 

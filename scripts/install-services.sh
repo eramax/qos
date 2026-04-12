@@ -92,6 +92,9 @@ fi
 if [[ -f "$root/scripts/qos-test.sh" ]]; then
   install -m 0755 "$root/scripts/qos-test.sh" "$rootfs/usr/bin/qos-test"
 fi
+if [[ -f "$root/scripts/qos-install.sh" ]]; then
+  install -m 0755 "$root/scripts/qos-install.sh" "$rootfs/usr/bin/qos-install"
+fi
 
 # Ensure a udhcpc default script exists so that a granted DHCP lease actually
 # configures the interface.  Alpine's busybox package usually ships this file,

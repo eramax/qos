@@ -54,7 +54,9 @@ pkg_version_from_repo() {
   index_url="$(repo_index_url "$repo")"
   index_tar="$cache_root/$(basename "$repo").APKINDEX.tar.gz"
   index_txt="$cache_root/$(basename "$repo").APKINDEX"
-  download_file "$index_url" "$index_tar"
+  if [[ ! -f "$index_tar" ]]; then
+    download_file "$index_url" "$index_tar"
+  fi
   bsdtar -xOf "$index_tar" APKINDEX > "$index_txt"
   awk -v pkg="$pkg" '
     $0 == "P:" pkg { hit=1; next }
@@ -70,7 +72,9 @@ pkg_download() {
   local dest
   url="${repo%/}/$apk_arch/${pkg}-${version}.apk"
   dest="$cache_root/${pkg}-${version}.apk"
-  download_file "$url" "$dest"
+  if [[ ! -f "$dest" ]]; then
+    download_file "$url" "$dest"
+  fi
   local sha
   sha="$(sha256sum "$dest" | awk '{print $1}')"
   manifest_add "download: $url sha256=$sha"

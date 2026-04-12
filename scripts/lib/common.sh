@@ -115,9 +115,19 @@ manifest_add() {
 download_file() {
   local url="${1:-}"
   local dest="${2:-}"
-  [[ -n "$url" && -n "$dest" ]] || die "download_file: usage url dest"
+  local skip_if_exists="${3:-0}"
+  [[ -n "$url" && -n "$dest" ]] || die "download_file: usage url dest [skip_if_exists]"
   mkdir -p "$(dirname "$dest")"
-  curl -fsSL "$url" -o "$dest"
+  if [[ "$skip_if_exists" == "1" && -f "$dest" && -s "$dest" ]]; then
+    echo "  [CACHED] $(basename "$dest")"
+    return 0
+  fi
+  # Support resume for partial downloads
+  local curl_args=(-fsSL --retry 3 --retry-delay 5 --connect-timeout 30)
+  if [[ -f "$dest" ]]; then
+    curl_args+=(-C -)  # Resume partial download
+  fi
+  curl "${curl_args[@]}" "$url" -o "$dest"
 }
 
 _cleanup_cmds=()
