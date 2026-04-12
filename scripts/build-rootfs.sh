@@ -23,15 +23,7 @@ rm -rf "$rootfs"
 mkdir -p "$rootfs"
 mkdir -p "$cache_root"
 
-"$script_dir/apply-rootfs-layout.sh" "$rootfs"
-chmod -R u+w "$rootfs"
-
-if [[ "${ROOTFS_SKIP_APK:-0}" == "1" ]]; then
-  echo "rootfs staging complete (apk install skipped)"
-  exit 0
-fi
-
-require_cmd curl tar sha256sum
+require_cmd curl bsdtar fakeroot sha256sum
 
 mapfile -t repos < <(grep -vE '^\s*#|^\s*$' "$repos_file")
 mapfile -t base_pkgs < <(grep -vE '^\s*#|^\s*$' "$base_pkgs_file")
@@ -63,7 +55,7 @@ pkg_version_from_repo() {
   index_tar="$cache_root/$(basename "$repo").APKINDEX.tar.gz"
   index_txt="$cache_root/$(basename "$repo").APKINDEX"
   download_file "$index_url" "$index_tar"
-  tar -xOf "$index_tar" APKINDEX > "$index_txt"
+  bsdtar -xOf "$index_tar" APKINDEX > "$index_txt"
   awk -v pkg="$pkg" '
     $0 == "P:" pkg { hit=1; next }
     hit && $0 ~ /^V:/ { sub(/^V:/, "", $0); print; exit }
@@ -107,13 +99,19 @@ tool_root="$cache_root/tooling"
 apk_static_dir="$tool_root/apk-static"
 apk_static_path="$tool_root/apk.static"
 mkdir -p "$apk_static_dir"
-tar -xzf "$apk_tools_pkg" -C "$apk_static_dir" sbin/apk.static
+bsdtar -xzf "$apk_tools_pkg" -C "$apk_static_dir" sbin/apk.static
 install -m 0755 "$apk_static_dir/sbin/apk.static" "$apk_static_path"
 
 mkdir -p "$rootfs/etc/apk/keys"
-tar -xzf "$alpine_keys_pkg" -C "$rootfs" etc/apk/keys
+bsdtar -xzf "$alpine_keys_pkg" -C "$rootfs" etc/apk/keys
 
-"$apk_static_path" --root "$rootfs" --initdb --arch "$apk_arch" "${repo_args[@]}" --keys-dir "$rootfs/etc/apk/keys" add --no-cache --no-scripts "${pkg_args[@]}"
+if [[ "${ROOTFS_SKIP_APK:-0}" == "1" ]]; then
+  "$script_dir/apply-rootfs-layout.sh" "$rootfs"
+  echo "rootfs staging complete (apk install skipped)"
+  exit 0
+fi
+
+fakeroot -- "$apk_static_path" --root "$rootfs" --initdb --arch "$apk_arch" "${repo_args[@]}" --keys-dir "$rootfs/etc/apk/keys" add --no-cache --no-scripts "${pkg_args[@]}"
 
 "$script_dir/apply-rootfs-layout.sh" "$rootfs"
 

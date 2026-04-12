@@ -70,15 +70,14 @@ for arg in \$(cat /proc/cmdline); do
   esac
 done
 
-mkdir -p /sysroot /sysroot/var
+mkdir -p /sysroot
 echo "[initramfs] resolving root label \$root_label"
 root_dev="\$(findfs "LABEL=\$root_label")"
 echo "[initramfs] mounting root device \$root_dev"
 mount -t ext4 -o ro "\$root_dev" /sysroot
-echo "[initramfs] resolving state label \$state_label"
-state_dev="\$(findfs "LABEL=\$state_label")"
-echo "[initramfs] mounting state device \$state_dev"
-mount -t ext4 -o rw "\$state_dev" /sysroot/var
+mkdir -p /sysroot/var
+echo "[initramfs] mounting tmpfs /var"
+mount -t tmpfs tmpfs /sysroot/var
 echo "[initramfs] mounting proc, sysfs, devtmpfs, and tmpfs in sysroot"
 mkdir -p /sysroot/proc /sysroot/sys /sysroot/dev /sysroot/run
 mount -t proc proc /sysroot/proc

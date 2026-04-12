@@ -70,7 +70,7 @@ bootstrap_gnu_tool() {
   )
 }
 
-bootstrap_gnu_tool m4 1.4.19 https://ftp.gnu.org/gnu/m4/m4-1.4.19.tar.xz
+bootstrap_gnu_tool m4 1.4.20 https://ftp.gnu.org/gnu/m4/m4-1.4.20.tar.xz
 bootstrap_gnu_tool flex 2.6.4 https://github.com/westes/flex/releases/download/v2.6.4/flex-2.6.4.tar.gz
 bootstrap_gnu_tool bison 3.8.2 https://ftp.gnu.org/gnu/bison/bison-3.8.2.tar.xz
 

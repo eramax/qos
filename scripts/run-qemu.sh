@@ -77,7 +77,7 @@ else
 fi
 
 if [[ -n "$hostfwd_port" && "$hostfwd_port" != "none" ]]; then
-  qemu_netdev_arg=(-netdev "user,id=net0,hostfwd=tcp::${hostfwd_port}-:22")
+  qemu_netdev_arg=(-netdev "user,id=net0,hostfwd=tcp:127.0.0.1:${hostfwd_port}-:22")
 else
   qemu_netdev_arg=(-netdev "user,id=net0")
 fi

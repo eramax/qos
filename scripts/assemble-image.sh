@@ -99,11 +99,13 @@ truncate -s "$state_size" "$state_img"
 
 mkfs.vfat -F 32 -n QOS-EFI "$efi_img" >/dev/null
 mmd -i "$efi_img" ::/EFI ::/EFI/BOOT
+printf 'map -r\r\nfs0:\\EFI\\BOOT\\BOOTX64.EFI\r\n' > "$partitions_dir/startup.nsh"
 mcopy -i "$efi_img" "$boot_stage_dir/limine.conf" ::/limine.conf
 mcopy -i "$efi_img" "$boot_stage_dir/EFI/BOOT/limine.conf" ::/EFI/BOOT/limine.conf
 mcopy -i "$efi_img" "$boot_stage_dir/vmlinuz" ::/vmlinuz
 mcopy -i "$efi_img" "$boot_stage_dir/initramfs.img" ::/initramfs.img
 mcopy -i "$efi_img" "$boot_stage_dir/EFI/BOOT/BOOTX64.EFI" ::/EFI/BOOT/BOOTX64.EFI
+mcopy -i "$efi_img" "$partitions_dir/startup.nsh" ::/startup.nsh
 if [[ -f "$boot_stage_dir/EFI/BOOT/BOOTIA32.EFI" ]]; then
   mcopy -i "$efi_img" "$boot_stage_dir/EFI/BOOT/BOOTIA32.EFI" ::/EFI/BOOT/BOOTIA32.EFI
 fi
@@ -126,13 +128,8 @@ rm -rf "$slot_root_dir"
 cp -a "$rootfs" "$slot_root_dir"
 
 raw_image="$image_output_dir/$image_name"
-raw_size="${IMAGE_SIZE:-$((
-  $(size_to_bytes "$efi_size") +
-  $(size_to_bytes "$root_a_size") +
-  $(size_to_bytes "$root_b_size") +
-  $(size_to_bytes "$state_size") +
-  64 * 1024 * 1024
-))}"
+raw_size="${IMAGE_SIZE:-320M}"
+rm -f "$raw_image"
 truncate -s "$raw_size" "$raw_image"
 
 sgdisk -o "$raw_image" >/dev/null

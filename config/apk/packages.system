@@ -1,6 +1,7 @@
 # System packages layered on top of the base image.
 execline
 dropbear
+iproute2
 nftables
 s6-linux-init
 s6-portable-utils

@@ -2,9 +2,18 @@
 set -eu
 
 # Bring up the first non-loopback interface with DHCP.
-iface="$(ls /sys/class/net | grep -vx lo | head -n1 || true)"
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+iface=""
+for candidate in /sys/class/net/*; do
+  [ -e "$candidate" ] || continue
+  name="${candidate##*/}"
+  [ "$name" = lo ] && continue
+  iface="$name"
+  break
+done
 [ -n "$iface" ] || {
   echo "networking: no non-loopback interface found" >&2
   exit 1
 }
+exec /bin/busybox ip link set dev "$iface" up
 exec /bin/busybox udhcpc -i "$iface" -q -f

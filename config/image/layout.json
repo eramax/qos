@@ -7,7 +7,7 @@
       "name": "efi",
       "filesystem": "vfat",
       "mount": "/boot/efi",
-      "size": "256M"
+      "size": "128M"
     },
     {
       "name": "root-a",
@@ -15,7 +15,7 @@
       "mount": "/",
       "slot": "A",
       "immutable": true,
-      "size": "1G"
+      "size": "64M"
     },
     {
       "name": "root-b",
@@ -23,14 +23,14 @@
       "mount": "/",
       "slot": "B",
       "immutable": true,
-      "size": "1G"
+      "size": "64M"
     },
     {
       "name": "state",
       "filesystem": "ext4",
       "mount": "/var",
       "mutable": true,
-      "size": "256M"
+      "size": "12M"
     }
   ]
 }

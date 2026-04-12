@@ -35,6 +35,12 @@ Use the Makefile:
 make build
 ```
 
+Clean build from scratch:
+
+```bash
+make full
+```
+
 Verbose build with logs:
 
 ```bash
@@ -49,10 +55,22 @@ Boot in QEMU with live serial output:
 QEMU_HOSTFWD_PORT=none make boot
 ```
 
+Pack the current payload into the raw image:
+
+```bash
+make image
+```
+
 Smoke boot with log capture:
 
 ```bash
 make smoke
+```
+
+Boot, SSH in, install `btop`, and run it:
+
+```bash
+make ssh-test
 ```
 
 ## Useful commands
