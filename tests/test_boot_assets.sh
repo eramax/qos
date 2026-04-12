@@ -74,5 +74,6 @@ grep -qxF "    kernel_path: boot():/vmlinuz" "$boot_dir/limine.conf" || die "mis
 grep -qxF "    module_path: boot():/initramfs.img" "$boot_dir/limine.conf" || die "missing Limine initramfs path"
 grep -qF "earlycon=uart,io,0x3f8,115200n8" "$boot_dir/limine.conf" || die "missing kernel earlycon setting"
 grep -qF "loglevel=7 ignore_loglevel" "$boot_dir/limine.conf" || die "missing kernel loglevel settings"
+grep -q '/usr/sbin/qos-reset' "$repo_root/scripts/apply-rootfs-layout.sh" || die "factory reset command must be installed into the image"
 
 echo "ok"

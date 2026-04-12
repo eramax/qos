@@ -12,6 +12,8 @@ rootfs="${1:-${ROOTFS_DIR:-}}"
 root="$(repo_root)"
 paths_file="$root/config/rootfs/paths.txt"
 [[ -f "$paths_file" ]] || die "missing rootfs path manifest: $paths_file"
+host_busybox="$(command -v busybox || true)"
+[[ -n "$host_busybox" ]] || die "missing host busybox binary"
 
 mkdir -p "$rootfs"
 
@@ -30,16 +32,20 @@ while IFS= read -r path; do
   mkdir -p "$rootfs/$rel"
 done < "$paths_file"
 
-# Immutable rootfs should expose /bin/ash via busybox and /bin/sh via ash.
-# busybox --install is skipped (--no-scripts in build-rootfs.sh), so wire up
-# the applets we actually need by hand.
-ln -sfn busybox "$rootfs/bin/ash"
-ln -sfn ash    "$rootfs/bin/sh"
-ln -sfn busybox "$rootfs/bin/sed"
-ln -sfn busybox "$rootfs/bin/hostname"
-ln -sfn busybox "$rootfs/bin/login"
-ln -sfn /bin/busybox "$rootfs/sbin/getty"
+# Immutable rootfs should expose BusyBox applets broadly, then override the
+# few entrypoints we care about.
+while IFS= read -r applet; do
+  [[ "$applet" == busybox ]] && continue
+  ln -sfn busybox "$rootfs/bin/$applet"
+  ln -sfn busybox "$rootfs/sbin/$applet"
+done < <("$host_busybox" --list)
+ln -sfn /bin/busybox "$rootfs/sbin/busybox"
+ln -sfn ash "$rootfs/bin/sh"
 ln -sfn /usr/bin/s6-linux-init "$rootfs/sbin/init"
+
+mkdir -p "$rootfs/etc/qos"
+install -m 0644 "$root/config/image/slots.json" "$rootfs/etc/qos/slots.json"
+install -m 0755 "$root/scripts/factory-reset.sh" "$rootfs/usr/sbin/qos-reset"
 
 # Dev/test image: set root password to "root".
 # Must happen before the chmod loop locks /etc to 0555.
@@ -61,6 +67,8 @@ done < "$paths_file"
 if [[ -f "$rootfs/etc/apk/repositories" ]]; then
   chmod 0444 "$rootfs/etc/apk/repositories"
 fi
+chmod 0444 "$rootfs/etc/qos/slots.json" 2>/dev/null || true
 if [[ -d "$rootfs/etc/apk/keys" ]]; then
   chmod -R a-w "$rootfs/etc/apk/keys"
 fi
+chmod 0555 "$rootfs/usr/sbin/qos-reset" 2>/dev/null || true

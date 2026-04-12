@@ -4,6 +4,7 @@
 /etc
 /etc/apk
 /etc/apk/keys
+/etc/qos
 /home
 /lib
 /lib64
