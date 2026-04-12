@@ -49,7 +49,6 @@ PATH=/bin
 
 exec >/dev/console 2>&1
 echo "[initramfs] init started"
-echo "[initramfs] mounting proc, sysfs, devtmpfs, and tmpfs"
 
 mount -t proc proc /proc
 mount -t sysfs sysfs /sys
@@ -70,20 +69,46 @@ for arg in \$(cat /proc/cmdline); do
   esac
 done
 
-mkdir -p /sysroot
 echo "[initramfs] resolving root label \$root_label"
 root_dev="\$(findfs "LABEL=\$root_label")"
-echo "[initramfs] mounting root device \$root_dev"
-mount -t ext4 -o ro "\$root_dev" /sysroot
-mkdir -p /sysroot/var
-echo "[initramfs] mounting tmpfs /var"
-mount -t tmpfs tmpfs /sysroot/var
-echo "[initramfs] mounting proc, sysfs, devtmpfs, and tmpfs in sysroot"
-mkdir -p /sysroot/proc /sysroot/sys /sysroot/dev /sysroot/run
+echo "[initramfs] mounting root device \$root_dev (read-only)"
+mkdir -p /ro-root
+mount -t ext4 -o ro "\$root_dev" /ro-root
+
+echo "[initramfs] resolving state label \$state_label"
+state_dev="\$(findfs "LABEL=\$state_label" 2>/dev/null || true)"
+
+if [ -n "\$state_dev" ]; then
+  echo "[initramfs] mounting state device \$state_dev"
+  mkdir -p /state
+  mount -t ext4 "\$state_dev" /state
+
+  mkdir -p /state/overlay/upper /state/overlay/work
+
+  echo "[initramfs] mounting overlayfs"
+  mkdir -p /sysroot
+  mount -t overlay overlay \\
+    -o "lowerdir=/ro-root,upperdir=/state/overlay/upper,workdir=/state/overlay/work" \\
+    /sysroot
+
+  # Bind-mount persistent /var from the state partition so that logs,
+  # apk cache, and slot state survive reboots independent of the overlay.
+  mkdir -p /sysroot/var /state/var
+  mount --bind /state/var /sysroot/var
+else
+  echo "[initramfs] WARN: no state partition, booting read-only"
+  mkdir -p /sysroot
+  mount --move /ro-root /sysroot
+fi
+
+echo "[initramfs] mounting essential filesystems"
+mkdir -p /sysroot/proc /sysroot/sys /sysroot/dev /sysroot/run /sysroot/tmp
 mount -t proc proc /sysroot/proc
 mount -t sysfs sysfs /sysroot/sys
 mount -t devtmpfs devtmpfs /sysroot/dev
 mount -t tmpfs tmpfs /sysroot/run
+mount -t tmpfs tmpfs -o nosuid,nodev,mode=1777 /sysroot/tmp
+
 echo "[initramfs] switching to /sbin/init"
 exec switch_root /sysroot /sbin/init
 EOF

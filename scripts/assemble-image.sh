@@ -116,6 +116,7 @@ mkfs.ext4 -F -L qos-root-b -d "$rootfs" "$root_b_img" >/dev/null
 state_root="$partitions_dir/state-root"
 rm -rf "$state_root"
 mkdir -p "$state_root/var/lib/qos" "$state_root/var/log" "$state_root/etc"
+mkdir -p "$state_root/overlay/upper" "$state_root/overlay/work"
 jq -n \
   --slurpfile slots "$slots_src" \
   '{active: $slots[0].active, inactive: $slots[0].inactive, fallback: $slots[0].fallback}' \
@@ -128,7 +129,7 @@ rm -rf "$slot_root_dir"
 cp -a "$rootfs" "$slot_root_dir"
 
 raw_image="$image_output_dir/$image_name"
-raw_size="${IMAGE_SIZE:-320M}"
+raw_size="${IMAGE_SIZE:-$(jq -r '.image_size // "512M"' "$layout_src")}"
 rm -f "$raw_image"
 truncate -s "$raw_size" "$raw_image"
 

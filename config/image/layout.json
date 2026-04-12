@@ -2,6 +2,7 @@
   "boot_mode": "uefi",
   "disk_format": "raw",
   "partition_table": "gpt",
+  "image_size": "512M",
   "partitions": [
     {
       "name": "efi",
@@ -30,7 +31,7 @@
       "filesystem": "ext4",
       "mount": "/var",
       "mutable": true,
-      "size": "12M"
+      "size": "128M"
     }
   ]
 }
