@@ -84,7 +84,6 @@ if [[ -x "$maker_bin" && -x "$maker_loader" ]]; then
     -1 \
     -D default \
     -p /usr/sbin:/usr/bin:/sbin:/bin \
-    -G "/sbin/getty 115200 ttyS0" \
     -f "$s6_skel_dir" \
     "$maker_stage_dir" >/dev/null
 
