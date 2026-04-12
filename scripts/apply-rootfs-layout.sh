@@ -35,6 +35,7 @@ done < "$paths_file"
 # the applets we actually need by hand.
 ln -sfn busybox "$rootfs/bin/ash"
 ln -sfn ash    "$rootfs/bin/sh"
+ln -sfn busybox "$rootfs/bin/sed"
 ln -sfn busybox "$rootfs/bin/hostname"
 ln -sfn busybox "$rootfs/bin/login"
 ln -sfn /bin/busybox "$rootfs/sbin/getty"
@@ -56,3 +57,10 @@ while IFS= read -r path; do
   rel="${path#/}"
   chmod "$(perm_for_path "$path")" "$rootfs/$rel"
 done < "$paths_file"
+
+if [[ -f "$rootfs/etc/apk/repositories" ]]; then
+  chmod 0444 "$rootfs/etc/apk/repositories"
+fi
+if [[ -d "$rootfs/etc/apk/keys" ]]; then
+  chmod -R a-w "$rootfs/etc/apk/keys"
+fi

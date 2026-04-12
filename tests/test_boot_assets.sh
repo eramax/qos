@@ -34,6 +34,8 @@ LIMINE_INSTALL_MOCK=1 LIMINE_STAGE_DIR="$boot_dir" KERNEL_BUILD_DIR="$kernel_dir
 [[ -f "$initramfs_dir/initramfs.img" ]] || die "missing initramfs image"
 [[ -f "$initramfs_dir/mkinitfs.conf" ]] || die "missing copied mkinitfs config"
 lz4 -dc "$initramfs_dir/initramfs.img" | cpio -it | rg -qx "bin/sh" || die "missing LZ4 initramfs shell symlink"
+grep -q 'mount -t cgroup2 cgroup2 /sysroot/sys/fs/cgroup' "$repo_root/scripts/build-initramfs.sh" || die "initramfs must mount cgroup2"
+grep -q 'cgroup.subtree_control' "$repo_root/scripts/build-initramfs.sh" || die "initramfs must enable cgroup v2 controllers"
 if [[ "$(readlink "$initramfs_dir/root/bin/sh")" != "busybox" ]]; then
   die "initramfs shell symlink must point to busybox"
 fi
@@ -53,6 +55,9 @@ for setting in \
   "CONFIG_NO_HZ_IDLE=y" \
   "CONFIG_NO_HZ_FULL=n" \
   "CONFIG_CFS_BANDWIDTH=y" \
+  "CONFIG_CGROUP2=y" \
+  "CONFIG_CPUSETS=y" \
+  "CONFIG_MEMCG=y" \
   "CONFIG_ZRAM=y" \
   "CONFIG_ZSMALLOC=y" \
   "CONFIG_ZPOOL=y" \

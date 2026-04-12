@@ -122,6 +122,11 @@ echo "[initramfs] mounting essential filesystems"
 mkdir -p /sysroot/proc /sysroot/sys /sysroot/dev /sysroot/run /sysroot/tmp
 mount -t proc proc /sysroot/proc
 mount -t sysfs sysfs /sysroot/sys
+mkdir -p /sysroot/sys/fs/cgroup
+mount -t cgroup2 cgroup2 /sysroot/sys/fs/cgroup
+if [ -w /sysroot/sys/fs/cgroup/cgroup.subtree_control ]; then
+  echo '+cpuset +cpu +memory +pids' > /sysroot/sys/fs/cgroup/cgroup.subtree_control || true
+fi
 mount -t devtmpfs devtmpfs /sysroot/dev
 mkdir -p /sysroot/dev/pts
 mount -t devpts devpts /sysroot/dev/pts

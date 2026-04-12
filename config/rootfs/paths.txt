@@ -2,6 +2,8 @@
 /bin
 /dev
 /etc
+/etc/apk
+/etc/apk/keys
 /home
 /lib
 /lib64

@@ -28,6 +28,10 @@ done
 
 [[ -L "$rootfs/bin/sh" ]] || die "expected /bin/sh to be a symlink"
 [[ "$(readlink "$rootfs/bin/sh")" == "ash" ]] || die "expected /bin/sh -> ash"
+[[ -L "$rootfs/bin/sed" ]] || die "expected /bin/sed to be a symlink"
+[[ "$(readlink "$rootfs/bin/sed")" == "busybox" ]] || die "expected /bin/sed -> busybox"
+[[ -L "$rootfs/bin/sed" ]] || die "expected /bin/sed to be a symlink"
+[[ "$(readlink "$rootfs/bin/sed")" == "busybox" ]] || die "expected /bin/sed -> busybox"
 
 check_not_writable() {
   local path="$1"
