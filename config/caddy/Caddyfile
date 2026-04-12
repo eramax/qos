@@ -1,0 +1,31 @@
+{
+    "admin": "off",
+    "auto_https": "off"
+}
+
+# Default catch-all
+:80 {
+    respond "QOS Server Running" 200
+}
+
+# Example: Domain hosting
+# Replace with your actual domains and backends
+# example.com {
+#     reverse_proxy localhost:3000
+#     
+#     # Enable logging
+#     log {
+#         output file /var/log/reverse-proxy/access.log
+#     }
+# }
+
+# Example: API gateway
+# api.example.com {
+#     reverse_proxy localhost:8080
+# }
+
+# Example: Multiple services with path-based routing
+# app.example.com {
+#     reverse_proxy /api/* localhost:8080
+#     reverse_proxy localhost:3000
+# }

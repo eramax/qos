@@ -1,0 +1,63 @@
+{
+  "description": "Database service capability profile",
+  "service": "database",
+  "capabilities": {
+    "file": {
+      "read": [
+        "/etc/qos",
+        "/usr/bin",
+        "/usr/lib",
+        "/var/lib/database"
+      ],
+      "write": [
+        "/var/lib/database",
+        "/var/log/database",
+        "/run/database"
+      ],
+      "deny": [
+        "/etc/shadow",
+        "/root",
+        "/etc/ssh",
+        "/proc/kcore"
+      ]
+    },
+    "network": {
+      "bind": [5432],
+      "connect": ["127.0.0.1/32"],
+      "raw": false,
+      "multicast": false
+    },
+    "cpu": {
+      "quota_percent": 200,
+      "cpus": "all"
+    },
+    "memory": {
+      "max_bytes": "1G",
+      "swap_bytes": "512M",
+      "oom_policy": "stop"
+    },
+    "devices": {
+      "allow": [
+        "/dev/null",
+        "/dev/zero",
+        "/dev/urandom"
+      ],
+      "deny": [
+        "/dev/mem",
+        "/dev/kmem",
+        "/dev/port"
+      ]
+    },
+    "processes": {
+      "max": 500,
+      "can_signal": ["own", "children"],
+      "can_ptrace": false
+    },
+    "io": {
+      "read_bps": "500M",
+      "write_bps": "500M",
+      "read_iops": 5000,
+      "write_iops": 5000
+    }
+  }
+}

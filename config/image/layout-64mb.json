@@ -1,0 +1,47 @@
+{
+  "boot_mode": "uefi",
+  "disk_format": "raw",
+  "partition_table": "gpt",
+  "image_size": "64M",
+  "description": "Optimized 64MB base image with dynamic state expansion",
+  "partitions": [
+    {
+      "name": "efi",
+      "filesystem": "vfat",
+      "mount": "/boot/efi",
+      "size": "32M",
+      "description": "EFI partition with Limine bootloader, kernel, initramfs"
+    },
+    {
+      "name": "root-a",
+      "filesystem": "ext4",
+      "mount": "/",
+      "slot": "A",
+      "immutable": true,
+      "size": "16M",
+      "description": "Immutable root filesystem slot A"
+    },
+    {
+      "name": "root-b",
+      "filesystem": "ext4",
+      "mount": "/",
+      "slot": "B",
+      "immutable": true,
+      "size": "16M",
+      "description": "Immutable root filesystem slot B (for OTA updates)"
+    }
+  ],
+  "state_partition": {
+    "auto_create": true,
+    "name": "state",
+    "filesystem": "ext4",
+    "mount": "/var",
+    "size": "remaining",
+    "description": "Auto-created from remaining disk space on first boot"
+  },
+  "flash_instructions": {
+    "direct_flash": "dd if=qos-x86_64-64mb.raw of=/dev/sdX bs=4M status=progress",
+    "expand_after": "qos-expand /dev/sdX",
+    "note": "Image can be flashed to any disk >= 64MB. State partition auto-expands on first boot."
+  }
+}

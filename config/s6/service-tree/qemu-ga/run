@@ -1,0 +1,43 @@
+#!/bin/sh
+# QEMU Guest Agent service
+# Enables host-guest communication (shutdown, fs-freeze, info)
+
+set -e
+
+QGA_BIN="/usr/bin/qemu-ga"
+QGA_LOG="/var/log/qemu-ga"
+QGA_STATE="/var/lib/qemu-ga"
+
+# Create required directories
+mkdir -p "$QGA_LOG" "$QGA_STATE" /dev/virtio-ports
+
+# Check if qemu-ga is available
+if [ ! -x "$QGA_BIN" ]; then
+    echo "Warning: qemu-ga not found, guest agent disabled"
+    exec sleep infinity
+fi
+
+# Create virtio-serial device path if it exists
+VIRTIO_PATH="/dev/virtio-ports/org.qemu.guest_agent.0"
+
+# Check if virtio channel exists
+if [ ! -e "$VIRTIO_PATH" ]; then
+    echo "Warning: QEMU virtio-serial channel not found, guest agent will wait"
+    # Wait for device to appear (hotplug support)
+    for i in 1 2 3 4 5; do
+        if [ -e "$VIRTIO_PATH" ]; then
+            break
+        fi
+        sleep 1
+    done
+fi
+
+# Start QEMU guest agent
+exec 2>&1
+if [ -e "$VIRTIO_PATH" ]; then
+    echo "Starting QEMU guest agent on $VIRTIO_PATH"
+    exec "$QGA_BIN" -d -p "$VIRTIO_PATH" -l "$QGA_LOG/qemu-ga.log" -s "$QGA_STATE/qemu-ga.state"
+else
+    echo "Warning: Virtio channel not available, guest agent disabled"
+    exec sleep infinity
+fi

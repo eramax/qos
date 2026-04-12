@@ -1,0 +1,25 @@
+#!/bin/sh
+# Reverse proxy service using Caddy
+# Listens on ports 80/443 and routes traffic to backend services
+
+set -e
+
+# Configuration
+CADDY_BIN="/usr/bin/caddy"
+CADDY_CONF="/etc/caddy/Caddyfile"
+CADDY_DATA="/var/lib/caddy"
+CADDY_LOG="/var/log/reverse-proxy"
+
+# Create required directories
+mkdir -p "$CADDY_DATA" "$CADDY_LOG"
+
+# Check if caddy is available
+if [ ! -x "$CADDY_BIN" ]; then
+    echo "Warning: caddy not found, reverse proxy disabled"
+    # Sleep indefinitely to prevent service restart loop
+    exec sleep infinity
+fi
+
+# Start caddy
+exec 2>&1
+exec "$CADDY_BIN" run --config "$CADDY_CONF" --adapter caddyfile

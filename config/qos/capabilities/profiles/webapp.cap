@@ -1,0 +1,67 @@
+{
+  "description": "Web application service capability profile (e.g., Bun/Node.js app)",
+  "service": "webapp",
+  "capabilities": {
+    "file": {
+      "read": [
+        "/etc/qos",
+        "/usr/bin/bun",
+        "/usr/lib",
+        "/var/lib/webapp"
+      ],
+      "write": [
+        "/var/log/webapp",
+        "/var/lib/webapp",
+        "/var/cache/webapp",
+        "/run/webapp",
+        "/tmp"
+      ],
+      "deny": [
+        "/etc/shadow",
+        "/root",
+        "/etc/ssh",
+        "/proc/kcore",
+        "/sys/kernel"
+      ]
+    },
+    "network": {
+      "bind": [3000, 8080],
+      "connect": ["127.0.0.1/32", "192.168.0.0/16"],
+      "raw": false,
+      "multicast": false
+    },
+    "cpu": {
+      "quota_percent": 75,
+      "cpus": "all"
+    },
+    "memory": {
+      "max_bytes": "512M",
+      "swap_bytes": "256M",
+      "oom_policy": "continue"
+    },
+    "devices": {
+      "allow": [
+        "/dev/null",
+        "/dev/zero",
+        "/dev/urandom"
+      ],
+      "deny": [
+        "/dev/mem",
+        "/dev/kmem",
+        "/dev/port",
+        "/dev/sda"
+      ]
+    },
+    "processes": {
+      "max": 100,
+      "can_signal": ["own", "children"],
+      "can_ptrace": false
+    },
+    "io": {
+      "read_bps": "200M",
+      "write_bps": "100M",
+      "read_iops": 2000,
+      "write_iops": 1000
+    }
+  }
+}

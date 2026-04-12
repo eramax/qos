@@ -1,0 +1,224 @@
+qos:~# s6-rc -a list
+s6-rc: fatal: unable to take locks: No such file or directory
+qos:~# s6-svstat /run/service/*
+down (not started yet) , normally up, want up
+qos:~# free -m
+              total        used        free      shared  buff/cache   available
+Mem:            983          41         933           0           9         867
+Swap:           491           0         491
+qos:~# df -h
+Filesystem                Size      Used Available Use% Mounted on
+overlay                 828.8M    328.0K    769.5M   0% /
+/dev/vda4               828.8M    328.0K    769.5M   0% /var
+devtmpfs                488.5M         0    488.5M   0% /dev
+tmpfs                   491.5M         0    491.5M   0% /tmp
+tmpfs                   491.5M    156.0K    491.3M   0% /run
+qos:~# ip addr show
+1: lo: <LOOPBACK> mtu 65536 qdisc noop state DOWN qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP qlen 1000
+    link/ether 52:54:00:12:34:56 brd ff:ff:ff:ff:ff:ff
+    inet 10.0.3.76/24 brd 10.0.3.255 scope global eth0
+       valid_lft forever preferred_lft forever
+    inet6 fc42:5009:ba4b:5ab0:5054:ff:fe12:3456/64 scope global dynamic flags 100 
+       valid_lft forever preferred_lft forever
+    inet6 fe80::5054:ff:fe12:3456/64 scope link 
+       valid_lft forever preferred_lft forever
+3: sit0@NONE: <NOARP> mtu 1480 qdisc noop state DOWN qlen 1000
+    link/sit 0.0.0.0 brd 0.0.0.0
+qos:~# ip route show
+default via 10.0.3.1 dev eth0  metric 202 
+10.0.3.0/24 dev eth0 scope link  src 10.0.3.76 
+qos:~# lsmod
+Module                  Size  Used by    Not tainted
+qos:~# uname -r
+6.19.6
+qos:~# qos-capability list
+Available capability profiles:
+  database             Database service capability profile
+  reverse-proxy        Reverse proxy service capability profile
+  webapp               Web application service capability profile (e.g., Bun/Node.js app)
+qos:~# qos-capability apply webapp webapp.cap
+Applied capability profile 'webapp.cap' to service 'webapp'
+qos:~# qos-cluster status
+Node Status:
+============
+  Status file not found. Is cluster daemon running?
+qos:~# qos-cluster nodes
+Cluster Members:
+================
+
+Note: Cluster discovery is simplified in this version.
+Full multicast support requires additional configuration.
+qos:~# qos-cluster resources
+Cluster Resources:
+==================
+  No status information available yet.
+  Wait for cluster daemon to initialize.
+qos:~# qos-cluster services
+Cluster Services:
+=================
+  Local Services:
+    - cluster
+    - dns
+    - dropbear
+    - getty
+    - networking
+    - nftables
+    - ntpd
+    - reverse-proxy
+    - s6-linux-init-runleveld
+    - s6-linux-init-shutdownd
+    - s6-svscan-log
+    - webapp
+    - zram
+qos:~# ps aux | grep caddy
+  270 root      0:00 grep caddy
+qos:~# curl http://localhost:80
+^C
+qos:~# curl -H "Host: example.com" http://localhost
+^C
+qos:~# caddy validate --config /etc/caddy/Caddyfile
+-sh: caddy: not found
+qos:~# pkill -HUP caddy
+-sh: pkill: not found
+qos:~# cat /var/log/reverse-proxy/current
+cat: can't open '/var/log/reverse-proxy/current': No such file or directory
+qos:~# lsblk
+-sh: lsblk: not found
+qos:~# fdisk -l
+Found valid GPT with protective MBR; using GPT
+
+Disk /dev/vda: 2097152 sectors, 1024M
+Logical sector size: 512
+Disk identifier (GUID): a1f2de53-42f1-4692-b55e-66d077a7c7e8
+Partition table holds up to 128 entries
+First usable sector is 34, last usable sector is 2097118
+
+Number  Start (sector)    End (sector)  Size Name
+     1            2048          133119 64.0M EFI
+     2          133120          231423 48.0M root-a
+     3          231424          329727 48.0M root-b
+     4          329728         2091007  860M state
+qos:~# qos-expand /dev/sda
+Error: State partition not found on /dev/sda
+Available partitions:
+  /dev/sda*: unknown
+qos:~# 
+qos:~# df -h
+Filesystem                Size      Used Available Use% Mounted on
+overlay                 828.8M    328.0K    769.5M   0% /
+/dev/vda4               828.8M    328.0K    769.5M   0% /var
+devtmpfs                488.5M         0    488.5M   0% /dev
+tmpfs                   491.5M         0    491.5M   0% /tmp
+tmpfs                   491.5M    160.0K    491.3M   0% /run
+qos:~# du -sh /var/*
+12.0K	/var/lib
+4.0K	/var/log
+qos:~# ps aux | grep chronyd
+  287 root      0:00 grep chronyd
+qos:~# date
+Sun Apr 12 18:38:50 UTC 2026
+qos:~# 
+qos:~# cat /var/log/chrony/current
+cat: can't open '/var/log/chrony/current': No such file or directory
+qos:~# dmesg | tail -50
+ACPI: \_SB_.GSIH: Enabled at IRQ 23
+Serial: 8250/16550 driver, 4 ports, IRQ sharing disabled
+00:03: ttyS0 at I/O 0x3f8 (irq = 4, base_baud = 115200) is a 16550A
+virtio_blk virtio0: 4/0/0 default/read/poll queues
+virtio_blk virtio0: [vda] 2097152 512-byte logical blocks (1.07 GB/1.00 GiB)
+ vda: vda1 vda2 vda3 vda4
+zram: Added device: zram0
+i8042: PNP: PS/2 Controller [PNP0303:KBD,PNP0f13:MOU] at 0x60,0x64 irq 1,12
+serio: i8042 KBD port at 0x60,0x64 irq 1
+serio: i8042 AUX port at 0x60,0x64 irq 12
+rtc_cmos 00:04: RTC can wake from S4
+rtc_cmos 00:04: registered as rtc0
+rtc_cmos 00:04: setting system clock to 2026-04-12T18:31:55 UTC (1776018715)
+rtc_cmos 00:04: alarms up to one day, y3k, 242 bytes nvram
+softdog: initialized. soft_noboot=0 soft_margin=60 sec soft_panic=0 (nowayout=1)
+softdog:              soft_reboot_cmd=<not set> soft_active_on_boot=0
+amd_pstate: The CPPC feature is supported but currently disabled by the BIOS.
+Please enable it if your BIOS has the CPPC option.
+amd_pstate: the _CPC object is not present in SBIOS or ACPI disabled
+input: AT Translated Set 2 keyboard as /devices/platform/i8042/serio0/input/input1
+NET: Registered PF_INET6 protocol family
+Segment Routing with IPv6
+In-situ OAM (IOAM) with IPv6
+sit: IPv6, IPv4 and MPLS over IPv4 tunneling driver
+NET: Registered PF_PACKET protocol family
+IPI shorthand broadcast: enabled
+sched_clock: Marking stable (628605661, 6239990)->(647918818, -13073167)
+Loading compiled-in X.509 certificates
+Loaded X.509 cert 'Build time autogenerated kernel key: 011b0e5fc5787d22296cbed156dc8b3210347328'
+Demotion targets for Node 0: null
+Freeing unused kernel image (initmem) memory: 1956K
+Write protecting the kernel read-only data: 16384k
+Freeing unused kernel image (text/rodata gap) memory: 1220K
+Freeing unused kernel image (rodata/data gap) memory: 1196K
+Run /init as init process
+  with arguments:
+    /init
+  with environment:
+    HOME=/
+    TERM=linux
+    biosdevname=0
+EXT4-fs (vda2): orphan cleanup on readonly fs
+EXT4-fs (vda2): mounted filesystem c0d9baec-a9cb-49dd-beca-7f2c2082097f ro with ordered data mode. Quota mode: disabled.
+input: ImExPS/2 Generic Explorer Mouse as /devices/platform/i8042/serio1/input/input3
+tsc: Refined TSC clocksource calibration: 4200.038 MHz
+clocksource: tsc: mask: 0xffffffffffffffff max_cycles: 0x3c8a851e310, max_idle_ns: 440795266913 ns
+clocksource: Switched to clocksource tsc
+EXT4-fs (vda4): mounted filesystem 9466b523-6572-48fb-8857-451a3e27df46 r/w with ordered data mode. Quota mode: disabled.
+zram0: detected capacity change from 0 to 1006584
+Adding 503288k swap on /dev/zram0.  Priority:-1 extents:1 across:503288k SS
+qos:~# find /var/log -name "current" -exec cat {} \;
+qos:~# cat /sys/fs/cgroup/cgroup.controllers
+cpuset cpu io memory pids
+qos:~# mount | grep cgroup2
+cgroup2 on /sys/fs/cgroup type cgroup2 (rw,relatime)
+qos:~# grep Seccomp /proc/self/status
+Seccomp:	0
+Seccomp_filters:	0
+qos:~# cat /proc/sys/kernel/randomize_va_space
+1
+qos:~# ping -c 3 8.8.8.8
+PING 8.8.8.8 (8.8.8.8): 56 data bytes
+64 bytes from 8.8.8.8: seq=0 ttl=112 time=17.809 ms
+64 bytes from 8.8.8.8: seq=1 ttl=112 time=16.247 ms
+^C
+--- 8.8.8.8 ping statistics ---
+2 packets transmitted, 2 packets received, 0% packet loss
+round-trip min/avg/max = 16.247/17.028/17.809 ms
+qos:~# ping -c 3 google.com
+PING google.com (142.251.143.142): 56 data bytes
+64 bytes from 142.251.143.142: seq=0 ttl=111 time=5.937 ms
+64 bytes from 142.251.143.142: seq=1 ttl=111 time=20.081 ms
+^C
+--- google.com ping statistics ---
+2 packets transmitted, 2 packets received, 0% packet loss
+round-trip min/avg/max = 5.937/13.009/20.081 ms
+qos:~# nft list ruleset
+table inet filter {
+	chain input {
+		type filter hook input priority filter; policy accept;
+	}
+
+	chain forward {
+		type filter hook forward priority filter; policy drop;
+	}
+
+	chain output {
+		type filter hook output priority filter; policy accept;
+	}
+}
+qos:~# ip route show | grep multicast
+qos:~# 
+
+
+s6-supervise webapp: warning: unable to spawn ./run (waiting 60 seconds): Permission denied
+s6-supervise ntpd: warning: unable to spawn ./run (waiting 60 seconds): Permission denied
+s6-supervise dns: warning: unable to spawn ./run (waiting 60 seconds): Permission denied
+s6-supervise reverse-proxy: warning: unable to spawn ./run (waiting 60 seconds): Permission denied
+s6-supervise cluster: warning: unable to spawn ./run (waiting 60 seconds): Permission denied

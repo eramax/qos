@@ -1,0 +1,65 @@
+{
+  "description": "Reverse proxy service capability profile",
+  "service": "reverse-proxy",
+  "capabilities": {
+    "file": {
+      "read": [
+        "/etc/qos",
+        "/etc/caddy",
+        "/usr/bin/caddy",
+        "/usr/lib",
+        "/var/lib/reverse-proxy"
+      ],
+      "write": [
+        "/var/log/reverse-proxy",
+        "/var/lib/reverse-proxy",
+        "/run/reverse-proxy"
+      ],
+      "deny": [
+        "/etc/shadow",
+        "/root",
+        "/etc/ssh",
+        "/proc/kcore"
+      ]
+    },
+    "network": {
+      "bind": [80, 443, 8443],
+      "connect": ["0.0.0.0/0"],
+      "raw": false,
+      "multicast": false
+    },
+    "cpu": {
+      "quota_percent": 50,
+      "cpus": "all"
+    },
+    "memory": {
+      "max_bytes": "256M",
+      "swap_bytes": "128M",
+      "oom_policy": "stop"
+    },
+    "devices": {
+      "allow": [
+        "/dev/null",
+        "/dev/zero",
+        "/dev/urandom",
+        "/dev/random"
+      ],
+      "deny": [
+        "/dev/mem",
+        "/dev/kmem",
+        "/dev/port"
+      ]
+    },
+    "processes": {
+      "max": 50,
+      "can_signal": ["own", "children"],
+      "can_ptrace": false
+    },
+    "io": {
+      "read_bps": "100M",
+      "write_bps": "50M",
+      "read_iops": 1000,
+      "write_iops": 500
+    }
+  }
+}

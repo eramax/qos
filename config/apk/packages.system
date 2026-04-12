@@ -1,14 +1,27 @@
-# System packages layered on top of the base image.
-bash
+# System packages - essential server utilities only
+# Removed: bash (ash is sufficient), uutils-coreutils (busybox covers it),
+#          btop (too heavy), nano (vi in busybox is enough), chrony (too complex)
+
+# Core utilities
 curl
 dropbear
-execline
-gcompat
 iproute2
 nftables
+
+# Init system
+execline
 s6-linux-init
 s6-portable-utils
 s6-rc
-uutils-coreutils
-btop
-nano
+
+# Compatibility
+gcompat
+
+# Monitoring (lightweight alternatives)
+htop
+
+# Job scheduling
+dcron
+
+# QEMU guest agent (for host integration)
+qemu-guest-agent

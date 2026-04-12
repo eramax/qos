@@ -1,0 +1,99 @@
+#!/bin/sh
+# QOS Cluster Daemon - Lightweight node discovery and resource sharing
+# Uses UDP multicast for gossip-based cluster membership
+
+set -e
+
+CLUSTER_CONF="/etc/qos/cluster/node.conf"
+CLUSTER_LOG="/var/log/cluster"
+CLUSTER_DATA="/var/lib/cluster"
+
+mkdir -p "$CLUSTER_LOG" "$CLUSTER_DATA"
+
+# Default configuration
+MULTICAST_ADDR="239.255.0.1"
+MULTICAST_PORT=9090
+CLUSTER_NAME="qos-cluster"
+GOSSIP_INTERVAL=5  # seconds
+
+# Load configuration if exists
+if [ -f "$CLUSTER_CONF" ]; then
+    . "$CLUSTER_CONF"
+fi
+
+# Get node information
+NODE_ID="${NODE_ID:-$(hostname)}"
+NODE_IP="${NODE_IP:-$(ip -4 -o addr show dev eth0 2>/dev/null | awk '{print $4}' | cut -d/ -f1 || echo '127.0.0.1')}"
+NODE_CPU="$(nproc 2>/dev/null || echo 1)"
+NODE_RAM="$(grep MemTotal /proc/meminfo 2>/dev/null | awk '{print $2 * 1024}' || echo 0)"
+
+log() {
+    echo "[$(date -Iseconds)] $*" >> "$CLUSTER_LOG/cluster.log"
+}
+
+log "Starting QOS Cluster Daemon"
+log "Node: $NODE_ID, IP: $NODE_IP, CPUs: $NODE_CPU, RAM: $NODE_RAM bytes"
+
+# Simple cluster membership tracking
+MEMBERS_FILE="$CLUSTER_DATA/members.json"
+
+# Initialize membership
+if [ ! -f "$MEMBERS_FILE" ]; then
+    cat > "$MEMBERS_FILE" <<EOF
+{
+  "cluster": "$CLUSTER_NAME",
+  "nodes": {}
+}
+EOF
+fi
+
+# Broadcast node presence (simplified - in production use proper UDP multicast)
+broadcast_presence() {
+    local timestamp
+    timestamp="$(date +%s)"
+    
+    # Get current resource usage
+    local cpu_usage mem_usage disk_usage
+    cpu_usage="$(top -bn1 2>/dev/null | grep 'Cpu(s)' | awk '{print $2}' || echo 0)"
+    mem_usage="$(grep -E '^(MemTotal|MemAvailable):' /proc/meminfo 2>/dev/null | awk '{print $2}' | paste -sd' ' || echo '0 0')"
+    disk_usage="$(df /var 2>/dev/null | tail -1 | awk '{print $5}' | tr -d '%' || echo 0)"
+    
+    # Create node status
+    cat > "$CLUSTER_DATA/status.json" <<EOF
+{
+  "node_id": "$NODE_ID",
+  "ip": "$NODE_IP",
+  "timestamp": $timestamp,
+  "resources": {
+    "cpus": $NODE_CPU,
+    "ram_bytes": $NODE_RAM,
+    "cpu_usage_percent": ${cpu_usage:-0},
+    "disk_usage_percent": ${disk_usage:-0}
+  },
+  "services": []
+}
+EOF
+    
+    # In a real implementation, this would broadcast via UDP multicast
+    # For now, log the broadcast
+    log "Broadcast: node=$NODE_ID ip=$NODE_IP cpu=${cpu_usage:-0}% disk=${disk_usage:-0}%"
+}
+
+# Discover cluster members (simplified)
+discover_members() {
+    # In a real implementation, this would listen for UDP multicast
+    # and maintain a membership list with heartbeat timeouts
+    log "Discovery: listening for cluster members on $MULTICAST_ADDR:$MULTICAST_PORT"
+}
+
+# Main loop
+log "Cluster daemon started with gossip interval ${GOSSIP_INTERVAL}s"
+
+# Initial broadcast
+broadcast_presence
+
+# Continuous gossip loop
+while true; do
+    broadcast_presence
+    sleep "$GOSSIP_INTERVAL"
+done

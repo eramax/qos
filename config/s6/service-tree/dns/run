@@ -1,0 +1,23 @@
+#!/bin/sh
+# DNS service using dnsmasq
+# Provides local domain resolution and DHCP
+
+set -e
+
+DNSMASQ_BIN="/usr/sbin/dnsmasq"
+DNSMASQ_CONF="/etc/dnsmasq.conf"
+DNSMASQ_LOG="/var/log/dnsmasq"
+
+# Create required directories
+mkdir -p "$DNSMASQ_LOG"
+
+# Check if dnsmasq is available
+if [ ! -x "$DNSMASQ_BIN" ]; then
+    echo "Warning: dnsmasq not found, DNS service disabled"
+    # Sleep indefinitely to prevent service restart loop
+    exec sleep infinity
+fi
+
+# Start dnsmasq
+exec 2>&1
+exec "$DNSMASQ_BIN" --no-daemon --log-queries --log-facility="$DNSMASQ_LOG/dnsmasq.log"

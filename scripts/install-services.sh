@@ -44,6 +44,10 @@ if [[ -f "$etc_dir/shadow" ]]; then
 fi
 
 mkdir -p "$etc_dir/s6/service-tree" "$etc_dir/s6/s6-rc.d" "$etc_dir/dropbear" "$etc_dir/nftables" "$etc_dir/network"
+
+# Ensure /etc/qos and subdirectories are writable (created read-only in rootfs layout)
+chmod -R u+w "$etc_dir/qos" 2>/dev/null || mkdir -p "$etc_dir/qos"
+mkdir -p "$etc_dir/qos/capabilities" "$etc_dir/qos/cluster" "$etc_dir/caddy" "$etc_dir/chrony"
 mkdir -p "$rootfs/root/.ssh"
 
 cp -a "$root/config/s6/service-tree/." "$etc_dir/s6/service-tree/"
@@ -54,6 +58,40 @@ if [[ -f "$dropbear_keys_file" ]]; then
 fi
 install -m 0644 "$root/config/nftables/nftables.conf" "$etc_dir/nftables/nftables.conf"
 install -m 0644 "$root/config/network/interfaces.dhcp" "$etc_dir/network/interfaces.dhcp"
+
+# Install capability profiles
+if [[ -d "$root/config/qos/capabilities/profiles" ]]; then
+  chmod u+w "$etc_dir/qos/capabilities" 2>/dev/null || true
+  mkdir -p "$etc_dir/qos/capabilities/profiles"
+  cp -a "$root/config/qos/capabilities/profiles/." "$etc_dir/qos/capabilities/profiles/"
+fi
+
+# Install cluster configuration
+if [[ -f "$root/config/qos/cluster/node.conf" ]]; then
+  chmod u+w "$etc_dir/qos/cluster" 2>/dev/null || true
+  install -m 0644 "$root/config/qos/cluster/node.conf" "$etc_dir/qos/cluster/node.conf"
+fi
+
+# Install caddy configuration if caddy is available
+if [[ -d "$root/config/caddy" ]] && [[ -f "$rootfs/usr/bin/caddy" ]]; then
+  mkdir -p "$etc_dir/caddy"
+  cp -a "$root/config/caddy/." "$etc_dir/caddy/"
+fi
+
+# Install qos-capability and qos-cluster scripts
+chmod u+w "$rootfs/usr/bin" 2>/dev/null || true
+if [[ -f "$root/scripts/qos-capability.sh" ]]; then
+  install -m 0755 "$root/scripts/qos-capability.sh" "$rootfs/usr/bin/qos-capability"
+fi
+if [[ -f "$root/scripts/qos-cluster.sh" ]]; then
+  install -m 0755 "$root/scripts/qos-cluster.sh" "$rootfs/usr/bin/qos-cluster"
+fi
+if [[ -f "$root/scripts/qos-expand.sh" ]]; then
+  install -m 0755 "$root/scripts/qos-expand.sh" "$rootfs/usr/bin/qos-expand"
+fi
+if [[ -f "$root/scripts/qos-test.sh" ]]; then
+  install -m 0755 "$root/scripts/qos-test.sh" "$rootfs/usr/bin/qos-test"
+fi
 
 # Ensure a udhcpc default script exists so that a granted DHCP lease actually
 # configures the interface.  Alpine's busybox package usually ships this file,

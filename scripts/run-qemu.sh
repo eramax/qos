@@ -148,5 +148,8 @@ qemu-system-x86_64 \
   -device virtio-blk-pci,drive=bootdisk,bootindex=1 \
   "${qemu_netdev_arg[@]}" \
   -device virtio-net-pci,netdev=net0 \
+  -chardev socket,id=qga,path="$root/build/qemu/qga.sock",server,nowait \
+  -device virtio-serial-pci \
+  -device virtserialport,chardev=qga,name=org.qemu.guest_agent.0 \
   "${qemu_serial_arg[@]}" \
   -display none

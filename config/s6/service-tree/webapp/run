@@ -1,0 +1,76 @@
+#!/bin/sh
+# Example Bun web application service
+# Demonstrates capability-based access control with reverse proxy
+
+set -e
+
+APP_DIR="/var/lib/webapp"
+APP_LOG="/var/log/webapp"
+APP_PORT=3000
+
+# Create required directories
+mkdir -p "$APP_DIR" "$APP_LOG"
+
+# Check if bun is available
+if ! command -v bun >/dev/null 2>&1; then
+    echo "Warning: bun not found, webapp service disabled"
+    exec sleep infinity
+fi
+
+# Change to app directory
+cd "$APP_DIR"
+
+# Create a simple example app if it doesn't exist
+if [ ! -f "server.ts" ]; then
+    cat > "server.ts" <<'EOF'
+// Example Bun web application
+// This demonstrates hosting a service behind the reverse proxy
+
+const server = Bun.serve({
+  port: process.env.PORT || 3000,
+  hostname: "0.0.0.0",
+  fetch(req) {
+    const url = new URL(req.url);
+    
+    if (url.pathname === "/") {
+      return new Response("Hello from QOS WebApp!");
+    }
+    
+    if (url.pathname === "/health") {
+      return new Response(JSON.stringify({
+        status: "ok",
+        uptime: process.uptime(),
+        memory: process.memoryUsage()
+      }), {
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+    
+    if (url.pathname.startsWith("/api/")) {
+      return new Response(JSON.stringify({
+        message: "API endpoint",
+        path: url.pathname
+      }), {
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+    
+    return new Response("Not Found", { status: 404 });
+  },
+});
+
+console.log(`Server running on port ${server.port}`);
+console.log(`Access via: http://localhost:${server.port}`);
+console.log(`Reverse proxy will route yourdomain.com -> localhost:${server.port}`);
+EOF
+    echo "Created example server.ts in $APP_DIR"
+fi
+
+# Export environment variables
+export PORT="$APP_PORT"
+export NODE_ENV="production"
+
+# Start the application
+exec 2>&1
+echo "Starting Bun web application on port $APP_PORT..."
+exec bun run server.ts
