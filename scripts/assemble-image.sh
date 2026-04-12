@@ -73,9 +73,20 @@ part_size_from_layout() {
 efi_size="${efi_size:-$(part_size_from_layout efi)}"
 root_a_size="${root_a_size:-$(part_size_from_layout root-a)}"
 root_b_size="${root_b_size:-$(part_size_from_layout root-b)}"
-state_size="${state_size:-$(part_size_from_layout state)}"
 
-[[ -n "$efi_size" && -n "$root_a_size" && -n "$root_b_size" && -n "$state_size" ]] || die "missing partition size metadata"
+[[ -n "$efi_size" && -n "$root_a_size" && -n "$root_b_size" ]] || die "missing partition size metadata"
+
+# Auto-size state partition: fill remaining disk space.
+raw_size="${IMAGE_SIZE:-$(jq -r '.image_size // "1G"' "$layout_src")}"
+raw_bytes="$(size_to_bytes "$raw_size")"
+gpt_overhead=$((4 * 1024 * 1024))  # 4 MiB for GPT headers + alignment
+state_bytes=$(( raw_bytes - gpt_overhead - $(size_to_bytes "$efi_size") - $(size_to_bytes "$root_a_size") - $(size_to_bytes "$root_b_size") ))
+state_bytes=$(( state_bytes < 0 ? 0 : state_bytes ))
+# Round down to MiB boundary.
+state_bytes=$(( (state_bytes / (1024 * 1024)) * (1024 * 1024) ))
+(( state_bytes >= 1024 * 1024 )) || die "image too small: no room for state partition (need at least 1 MiB, have $(( state_bytes / (1024*1024) )) MiB)"
+state_mib=$(( state_bytes / (1024 * 1024) ))
+state_size="${STATE_PART_SIZE:-${state_mib}M}"
 
 manifest_add "command: scripts/assemble-image.sh image=$image_name"
 manifest_add "partition: efi size=$efi_size"
@@ -95,7 +106,6 @@ rm -f "$efi_img" "$root_a_img" "$root_b_img" "$state_img"
 truncate -s "$efi_size" "$efi_img"
 truncate -s "$root_a_size" "$root_a_img"
 truncate -s "$root_b_size" "$root_b_img"
-truncate -s "$state_size" "$state_img"
 
 mkfs.vfat -F 32 -n QOS-EFI "$efi_img" >/dev/null
 mmd -i "$efi_img" ::/EFI ::/EFI/BOOT
@@ -113,6 +123,25 @@ fi
 mkfs.ext4 -F -L qos-root-a -d "$rootfs" "$root_a_img" >/dev/null
 mkfs.ext4 -F -L qos-root-b -d "$rootfs" "$root_b_img" >/dev/null
 
+# Build the raw image and partition table first so we can query the exact
+# size sgdisk assigned to the state partition (fills remaining space).
+raw_image="$image_output_dir/$image_name"
+rm -f "$raw_image"
+truncate -s "$raw_size" "$raw_image"
+
+sgdisk -o "$raw_image" >/dev/null
+sgdisk -n 1:2048:+$efi_size -t 1:ef00 -c 1:EFI "$raw_image" >/dev/null
+sgdisk -n 2:0:+$root_a_size -t 2:8300 -c 2:root-a "$raw_image" >/dev/null
+sgdisk -n 3:0:+$root_b_size -t 3:8300 -c 3:root-b "$raw_image" >/dev/null
+sgdisk -n 4:0:+${state_size} -t 4:8300 -c 4:state "$raw_image" >/dev/null
+
+get_start_sector() {
+  local part="$1"
+  sgdisk -i "$part" "$raw_image" | awk -F': ' '/First sector/ {sub(/ .*/, "", $2); print $2; exit}'
+}
+
+truncate -s "$state_size" "$state_img"
+
 state_root="$partitions_dir/state-root"
 rm -rf "$state_root"
 mkdir -p "$state_root/var/lib/qos" "$state_root/var/log" "$state_root/etc"
@@ -127,22 +156,6 @@ slot_root_dir="$image_build_dir/slots/$inactive_slot/rootfs"
 chmod -R u+w "$image_build_dir/slots" 2>/dev/null || true
 rm -rf "$slot_root_dir"
 cp -a "$rootfs" "$slot_root_dir"
-
-raw_image="$image_output_dir/$image_name"
-raw_size="${IMAGE_SIZE:-$(jq -r '.image_size // "512M"' "$layout_src")}"
-rm -f "$raw_image"
-truncate -s "$raw_size" "$raw_image"
-
-sgdisk -o "$raw_image" >/dev/null
-sgdisk -n 1:2048:+$efi_size -t 1:ef00 -c 1:EFI "$raw_image" >/dev/null
-sgdisk -n 2:0:+$root_a_size -t 2:8300 -c 2:root-a "$raw_image" >/dev/null
-sgdisk -n 3:0:+$root_b_size -t 3:8300 -c 3:root-b "$raw_image" >/dev/null
-sgdisk -n 4:0:+$state_size -t 4:8300 -c 4:state "$raw_image" >/dev/null
-
-get_start_sector() {
-  local part="$1"
-  sgdisk -i "$part" "$raw_image" | awk -F': ' '/First sector/ {sub(/ .*/, "", $2); print $2; exit}'
-}
 
 write_partition() {
   local image_file="$1"
