@@ -80,21 +80,47 @@ if [[ -z "$kernel_version" ]]; then
 fi
 [[ -n "$kernel_version" ]] || die "kernel version is empty"
 
-kernel_url="https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-$kernel_version.tar.xz"
-kernel_tar="$cache_root/linux-$kernel_version.tar.xz"
-kernel_src="$cache_root/linux-$kernel_version"
-kernel_out="$kernel_build_dir/build"
-
 manifest_add "command: scripts/build-kernel.sh version=$kernel_version"
-manifest_add "source: kernel $kernel_url"
 
-if [[ ! -f "$kernel_tar" ]]; then
-  download_file "$kernel_url" "$kernel_tar"
-fi
-manifest_add "download: $kernel_url sha256=$(sha256sum "$kernel_tar" | awk '{print $1}')"
+# Determine source: git tag (RC) or tarball (stable)
+kernel_out="$kernel_build_dir/build"
+kernel_src="$cache_root/linux-$kernel_version"
 
-if [[ ! -d "$kernel_src" ]]; then
-  tar -xJf "$kernel_tar" -C "$cache_root"
+if [[ "$kernel_version" == *-rc* ]]; then
+  # RC kernels are only available via git
+  manifest_add "source: kernel git://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git#$kernel_version"
+  
+  require_cmd git
+  mkdir -p "$cache_root"
+  
+  if [[ ! -d "$cache_root/linux-torvalds/.git" ]]; then
+    echo "Cloning Linux kernel git repository (this may take a while)..."
+    git clone --depth 1 https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git "$cache_root/linux-torvalds"
+  fi
+  
+  cd "$cache_root/linux-torvalds"
+  echo "Fetching tag $kernel_version..."
+  git fetch --depth 1 origin tag "$kernel_version" 2>/dev/null || git fetch --depth 1 origin tag "v$kernel_version" 2>/dev/null || true
+  git checkout "$kernel_version" 2>/dev/null || git checkout "v$kernel_version" 2>/dev/null || true
+  cd - >/dev/null
+  
+  kernel_src="$cache_root/linux-torvalds"
+else
+  # Stable kernels from tarball
+  major="${kernel_version%%.*}"
+  kernel_url="https://cdn.kernel.org/pub/linux/kernel/v${major}.x/linux-$kernel_version.tar.xz"
+  kernel_tar="$cache_root/linux-$kernel_version.tar.xz"
+  
+  manifest_add "source: kernel $kernel_url"
+  
+  if [[ ! -f "$kernel_tar" ]]; then
+    download_file "$kernel_url" "$kernel_tar"
+  fi
+  manifest_add "download: $kernel_url sha256=$(sha256sum "$kernel_tar" | awk '{print $1}')"
+  
+  if [[ ! -d "$kernel_src" ]]; then
+    tar -xJf "$kernel_tar" -C "$cache_root"
+  fi
 fi
 
 mkdir -p "$kernel_out"

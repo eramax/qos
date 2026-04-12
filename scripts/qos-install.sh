@@ -218,35 +218,69 @@ cp -a /var/log/* "$MNT_VAR/log/" 2>/dev/null || true
 
 log "Var partition setup complete"
 
-# Setup EFI partition (only if mounted)
-if mountpoint -q "$MNT_EFI" 2>/dev/null; then
-    log "Setting up EFI partition..."
-    mkdir -p "$MNT_EFI/EFI/BOOT" "$MNT_EFI/qos"
-    
-    if [ -f /boot/vmlinuz ]; then
-        cp /boot/vmlinuz "$MNT_EFI/qos/"
-        log "Kernel copied to EFI"
+# Setup EFI partition (using mtools to avoid mounting issues)
+log "Setting up EFI partition..."
+
+# Check for Limine source to copy bootloader
+limine_src="$root/build/cache/limine/limine"
+# Fallback for installed environment where we might not have cache
+if [[ ! -d "$limine_src" ]]; then
+    # Try to find BOOTX64.EFI on the current boot disk's EFI partition
+    current_efi_dev=$(df /boot/efi 2>/dev/null | tail -1 | awk '{print $1}')
+    if [ -z "$current_efi_dev" ]; then
+        # Fallback: try to find it
+        current_efi_dev="/dev/vda1"
     fi
     
-    if [ -f /boot/initramfs.img ]; then
-        cp /boot/initramfs.img "$MNT_EFI/qos/"
-        log "Initramfs copied to EFI"
+    log "Extracting BOOTX64.EFI from current system..."
+    mkdir -p /tmp/current-efi
+    mount -o ro "$current_efi_dev" /tmp/current-efi 2>/dev/null || true
+    if [ -f /tmp/current-efi/EFI/BOOT/BOOTX64.EFI ]; then
+        cp /tmp/current-efi/EFI/BOOT/BOOTX64.EFI /tmp/BOOTX64.EFI
+        umount /tmp/current-efi 2>/dev/null
+        BOOTX64_SRC="/tmp/BOOTX64.EFI"
+    else
+        warn "Could not find BOOTX64.EFI on current system"
+        BOOTX64_SRC=""
     fi
-    
-    if [ -f /boot/limine.conf ]; then
-        cp /boot/limine.conf "$MNT_EFI/EFI/BOOT/"
-        cp /boot/limine.conf "$MNT_EFI/limine.conf"
-        log "Limine config copied to EFI"
-    fi
-    
-    cat > "$MNT_EFI/startup.nsh" <<'EOF'
-\EFI\BOOT\BOOTX64.EFI
-EOF
-    log "EFI partition setup complete"
 else
-    warn "EFI partition not mounted, skipping EFI setup"
-    warn "System will need Limine installed on EFI partition to boot"
+    BOOTX64_SRC="$limine_src/BOOTX64.EFI"
 fi
+
+# Create directories on EFI partition using mcopy/mmd
+# -i specifies the device
+mmd -i "${TARGET_DEV}1" ::/EFI 2>/dev/null || true
+mmd -i "${TARGET_DEV}1" ::/EFI/BOOT 2>/dev/null || true
+
+# Copy Limine Bootloader
+if [ -n "$BOOTX64_SRC" ] && [ -f "$BOOTX64_SRC" ]; then
+    log "  Copying BOOTX64.EFI..."
+    mcopy -i "${TARGET_DEV}1" "$BOOTX64_SRC" ::/EFI/BOOT/BOOTX64.EFI 2>/dev/null || error "Failed to copy BOOTX64.EFI"
+fi
+
+# Copy Kernel
+if [ -f /boot/vmlinuz ]; then
+    log "  Copying vmlinuz..."
+    mcopy -i "${TARGET_DEV}1" /boot/vmlinuz ::/vmlinuz 2>/dev/null || warn "Failed to copy vmlinuz"
+    # Also copy to boot dir for safety
+    mcopy -i "${TARGET_DEV}1" /boot/vmlinuz ::/boot/vmlinuz 2>/dev/null || true
+fi
+
+# Copy Initramfs
+if [ -f /boot/initramfs.img ]; then
+    log "  Copying initramfs.img..."
+    mcopy -i "${TARGET_DEV}1" /boot/initramfs.img ::/initramfs.img 2>/dev/null || warn "Failed to copy initramfs.img"
+    mcopy -i "${TARGET_DEV}1" /boot/initramfs.img ::/boot/initramfs.img 2>/dev/null || true
+fi
+
+# Copy Limine Config
+if [ -f /boot/limine.conf ]; then
+    log "  Copying limine.conf..."
+    mcopy -i "${TARGET_DEV}1" /boot/limine.conf ::/limine.conf 2>/dev/null || warn "Failed to copy limine.conf"
+    mcopy -i "${TARGET_DEV}1" /boot/limine.conf ::/EFI/BOOT/limine.conf 2>/dev/null || true
+fi
+
+log "EFI partition setup complete"
 
 # Update fstab
 log "Updating fstab..."
