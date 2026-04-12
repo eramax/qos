@@ -83,7 +83,7 @@ else
 fi
 
 qemu-system-x86_64 \
-  -machine q35,accel=tcg \
+  -machine q35,accel=kvm:tcg \
   -cpu max \
   -m "${QEMU_MEMORY:-256M}" \
   -drive if=pflash,format=raw,unit=0,readonly=on,file="$ovmf_code" \

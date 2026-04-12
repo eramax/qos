@@ -2,4 +2,7 @@
 set -eu
 
 # Load the host firewall policy for the minimal server image.
-exec /usr/sbin/nft -f /etc/nftables/nftables.conf
+# After loading, sleep so s6-svscan does not restart us (which would cause
+# repeated flush/reload cycles that transiently drop all packets).
+/usr/sbin/nft -f /etc/nftables/nftables.conf
+exec sleep 2147483647

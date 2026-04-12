@@ -1,0 +1,5 @@
+#!/bin/sh
+set -eu
+
+# Spawn a login shell on the serial console.
+exec /sbin/getty 115200 ttyS0

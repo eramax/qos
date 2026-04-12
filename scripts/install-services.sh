@@ -17,6 +17,19 @@ etc_dir="$rootfs/etc"
 
 chmod u+w "$etc_dir"
 chmod u+w "$rootfs/root"
+
+# Set root password to "root" for dev/test access.
+# Uses openssl to generate a SHA-512 crypt hash; awk writes it safely
+# (avoids sed misinterpreting $ in the hash).
+if [[ -f "$etc_dir/shadow" ]]; then
+  chmod u+w "$etc_dir/shadow"
+  root_pw_hash="$(openssl passwd -6 root)"
+  awk -v pw="$root_pw_hash" 'BEGIN{FS=OFS=":"} $1=="root"{$2=pw}1' \
+    "$etc_dir/shadow" > "$etc_dir/shadow.tmp"
+  mv "$etc_dir/shadow.tmp" "$etc_dir/shadow"
+  chmod 0400 "$etc_dir/shadow"
+fi
+
 mkdir -p "$etc_dir/s6/service-tree" "$etc_dir/s6/s6-rc.d" "$etc_dir/dropbear" "$etc_dir/nftables" "$etc_dir/network"
 mkdir -p "$rootfs/root/.ssh"
 
@@ -28,6 +41,30 @@ if [[ -f "$dropbear_keys_file" ]]; then
 fi
 install -m 0644 "$root/config/nftables/nftables.conf" "$etc_dir/nftables/nftables.conf"
 install -m 0644 "$root/config/network/interfaces.dhcp" "$etc_dir/network/interfaces.dhcp"
+
+# Ensure a udhcpc default script exists so that a granted DHCP lease actually
+# configures the interface.  Alpine's busybox package usually ships this file,
+# but provide a fallback in case --no-scripts leaves it out.
+udhcpc_script_dir="$rootfs/usr/share/udhcpc"
+if [[ ! -f "$udhcpc_script_dir/default.script" ]]; then
+  chmod u+w "$rootfs/usr" "$rootfs/usr/share" 2>/dev/null || true
+  mkdir -p "$udhcpc_script_dir"
+  cat > "$udhcpc_script_dir/default.script" <<'UDHCPC_SCRIPT'
+#!/bin/sh
+# Minimal udhcpc bound/renew script.
+case "$1" in
+  bound|renew)
+    [ -n "$ip" ]     && /bin/busybox ip addr replace "${ip}/${mask:-24}" dev "$interface"
+    [ -n "$router" ] && /bin/busybox ip route replace default via "$router" dev "$interface"
+    ;;
+  deconfig)
+    /bin/busybox ip addr flush dev "$interface"
+    /bin/busybox ip route del default 2>/dev/null || true
+    ;;
+esac
+UDHCPC_SCRIPT
+  chmod 0755 "$udhcpc_script_dir/default.script"
+fi
 
 s6_base_dir="$etc_dir/s6-linux-init"
 s6_skel_dir="$s6_base_dir/skel"
@@ -47,7 +84,7 @@ if [[ -x "$maker_bin" && -x "$maker_loader" ]]; then
     -1 \
     -D default \
     -p /usr/sbin:/usr/bin:/sbin:/bin \
-    -G "/sbin/getty 38400 tty1" \
+    -G "/sbin/getty 115200 ttyS0" \
     -f "$s6_skel_dir" \
     "$maker_stage_dir" >/dev/null
 
