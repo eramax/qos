@@ -35,6 +35,7 @@ done < "$paths_file"
 # the applets we actually need by hand.
 ln -sfn busybox "$rootfs/bin/ash"
 ln -sfn ash    "$rootfs/bin/sh"
+ln -sfn busybox "$rootfs/bin/hostname"
 ln -sfn busybox "$rootfs/bin/login"
 ln -sfn /bin/busybox "$rootfs/sbin/getty"
 ln -sfn /usr/bin/s6-linux-init "$rootfs/sbin/init"

@@ -111,6 +111,13 @@ else
   mount --move /ro-root /sysroot
 fi
 
+if [ -f /sysroot/etc/hostname ]; then
+  hostname_value="\$(tr -d '\\r\\n' < /sysroot/etc/hostname)"
+  if [ -n "\$hostname_value" ]; then
+    echo "\$hostname_value" > /proc/sys/kernel/hostname
+  fi
+fi
+
 echo "[initramfs] mounting essential filesystems"
 mkdir -p /sysroot/proc /sysroot/sys /sysroot/dev /sysroot/run /sysroot/tmp
 mount -t proc proc /sysroot/proc

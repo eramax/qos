@@ -10,3 +10,4 @@ s6-linux-init
 s6-portable-utils
 s6-rc
 uutils-coreutils
+btop
