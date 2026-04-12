@@ -75,6 +75,7 @@ echo "[initramfs] mounting root device \$root_dev (read-only)"
 mkdir -p /ro-root
 mount -t ext4 -o ro "\$root_dev" /ro-root
 
+overlay_ok=no
 echo "[initramfs] resolving state label \$state_label"
 state_dev="\$(findfs "LABEL=\$state_label" 2>/dev/null || true)"
 
@@ -87,14 +88,23 @@ if [ -n "\$state_dev" ]; then
 
   echo "[initramfs] mounting overlayfs"
   mkdir -p /sysroot
-  mount -t overlay overlay \\
-    -o "lowerdir=/ro-root,upperdir=/state/overlay/upper,workdir=/state/overlay/work" \\
-    /sysroot
-
-  # Bind-mount persistent /var from the state partition so that logs,
-  # apk cache, and slot state survive reboots independent of the overlay.
-  mkdir -p /sysroot/var /state/var
-  mount --bind /state/var /sysroot/var
+  if mount -t overlay overlay \
+      -o "lowerdir=/ro-root,upperdir=/state/overlay/upper,workdir=/state/overlay/work" \
+      /sysroot; then
+    overlay_ok=yes
+    mkdir -p /state/var /sysroot/var
+    mount --bind /state/var /sysroot/var
+    # Fix ownership: rootfs was built by a non-root user; correct
+    # critical paths so login, dropbear, and apk work inside the VM.
+    chown 0:0 /sysroot/root
+    chown -R 0:0 /sysroot/root/.ssh
+    chmod 700 /sysroot/root/.ssh
+    chown 0:0 /sysroot/etc/shadow
+    chmod 640 /sysroot/etc/shadow
+  else
+    echo "[initramfs] WARN: overlay mount failed, booting read-only"
+    mount --move /ro-root /sysroot
+  fi
 else
   echo "[initramfs] WARN: no state partition, booting read-only"
   mkdir -p /sysroot
@@ -106,6 +116,8 @@ mkdir -p /sysroot/proc /sysroot/sys /sysroot/dev /sysroot/run /sysroot/tmp
 mount -t proc proc /sysroot/proc
 mount -t sysfs sysfs /sysroot/sys
 mount -t devtmpfs devtmpfs /sysroot/dev
+mkdir -p /sysroot/dev/pts
+mount -t devpts devpts /sysroot/dev/pts
 mount -t tmpfs tmpfs /sysroot/run
 mount -t tmpfs tmpfs -o nosuid,nodev,mode=1777 /sysroot/tmp
 
