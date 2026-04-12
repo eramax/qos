@@ -6,7 +6,7 @@ BUILD_KERNEL_JOBS ?= 15
 BUILD_TOOL_JOBS ?= 15
 BUILD_LOG ?= build/logs/build.log
 QEMU_IMAGE ?= dist/qos-x86_64.raw
-QEMU_MEMORY ?= 256M
+QEMU_MEMORY ?= 1G
 QEMU_HOSTFWD_PORT ?= none
 
 ROOT := $(shell pwd -P)

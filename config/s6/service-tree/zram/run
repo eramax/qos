@@ -1,0 +1,45 @@
+#!/bin/sh
+set -eu
+
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+
+zram_control="/sys/class/zram-control/hot_add"
+zram_dev="/dev/zram0"
+zram_name="${zram_dev##*/}"
+size_bytes="${ZRAM_SWAP_SIZE_BYTES:-0}"
+
+if /bin/busybox grep -q " $zram_dev " /proc/swaps 2>/dev/null; then
+  exec sleep 2147483647
+fi
+
+if [ ! -e /sys/class/block/zram0 ] && [ -e "$zram_control" ]; then
+  echo 1 > "$zram_control"
+fi
+
+if [ ! -e "/sys/class/block/$zram_name" ]; then
+  echo "zram: could not create a zram device" >&2
+  exit 1
+fi
+
+if [ -z "$size_bytes" ] || [ "$size_bytes" = 0 ]; then
+  mem_kb="$(/bin/busybox awk '/MemTotal:/ {print $2}' /proc/meminfo)"
+  if [ -z "$mem_kb" ]; then
+    echo "zram: could not read MemTotal" >&2
+    exit 1
+  fi
+  size_bytes=$((mem_kb * 1024 / 2))
+fi
+
+alg_file="/sys/class/block/$zram_name/comp_algorithm"
+if [ -w "$alg_file" ] && /bin/busybox grep -qw lz4 "$alg_file"; then
+  echo lz4 > "$alg_file"
+fi
+
+if [ "$(cat "/sys/class/block/$zram_name/disksize" 2>/dev/null || echo 0)" = 0 ]; then
+  echo "$size_bytes" > "/sys/class/block/$zram_name/disksize"
+fi
+
+/bin/busybox mkswap "$zram_dev"
+/bin/busybox swapon "$zram_dev"
+
+exec sleep 2147483647

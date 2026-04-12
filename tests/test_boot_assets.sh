@@ -33,7 +33,7 @@ LIMINE_INSTALL_MOCK=1 LIMINE_STAGE_DIR="$boot_dir" KERNEL_BUILD_DIR="$kernel_dir
 [[ -f "$kernel_dir/kernel.config" ]] || die "missing copied kernel config"
 [[ -f "$initramfs_dir/initramfs.img" ]] || die "missing initramfs image"
 [[ -f "$initramfs_dir/mkinitfs.conf" ]] || die "missing copied mkinitfs config"
-gzip -dc "$initramfs_dir/initramfs.img" | cpio -it | rg -qx "bin/sh" || die "missing initramfs shell symlink"
+lz4 -dc "$initramfs_dir/initramfs.img" | cpio -it | rg -qx "bin/sh" || die "missing LZ4 initramfs shell symlink"
 if [[ "$(readlink "$initramfs_dir/root/bin/sh")" != "busybox" ]]; then
   die "initramfs shell symlink must point to busybox"
 fi
@@ -45,6 +45,7 @@ fi
 [[ -f "$boot_dir/EFI/BOOT/BOOTX64.EFI" ]] || die "missing UEFI boot file"
 
 for setting in \
+  "CONFIG_SMP=y" \
   "CONFIG_PREEMPT_DYNAMIC=y" \
   "CONFIG_PREEMPT_VOLUNTARY=y" \
   "CONFIG_SCHED_AUTOGROUP=n" \
@@ -52,6 +53,11 @@ for setting in \
   "CONFIG_NO_HZ_IDLE=y" \
   "CONFIG_NO_HZ_FULL=n" \
   "CONFIG_CFS_BANDWIDTH=y" \
+  "CONFIG_ZRAM=y" \
+  "CONFIG_ZSMALLOC=y" \
+  "CONFIG_ZPOOL=y" \
+  "CONFIG_CRYPTO_LZ4=y" \
+  "CONFIG_RD_LZ4=y" \
   "CONFIG_UCLAMP_TASK=y"; do
   grep -qxF "$setting" "$repo_root/config/kernel/x86_64.config" || die "missing kernel scheduler setting: $setting"
 done

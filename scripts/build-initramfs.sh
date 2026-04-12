@@ -28,7 +28,7 @@ if [[ "${INITRAMFS_BUILD_MOCK:-0}" == "1" ]]; then
   exit 0
 fi
 
-require_cmd cpio gzip busybox
+require_cmd cpio lz4 busybox
 
 [[ -x "$host_busybox" ]] || die "missing host busybox binary"
 
@@ -133,6 +133,6 @@ exec switch_root /sysroot /sbin/init
 EOF
 chmod 0755 "$stage_root/init"
 
-( cd "$stage_root" && find . -print0 | cpio --null -o -H newc ) | gzip -9 > "$initramfs_build_dir/initramfs.img"
+( cd "$stage_root" && find . -print0 | cpio --null -o -H newc ) | lz4 -l -z -q -c > "$initramfs_build_dir/initramfs.img"
 
 echo "initramfs build complete: $initramfs_build_dir/initramfs.img"

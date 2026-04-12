@@ -13,6 +13,7 @@ repo_root="$(cd "$here/.." && pwd -P)"
 [[ -x "$repo_root/scripts/run-qemu.sh" ]] || die "missing run-qemu.sh"
 [[ -x "$repo_root/scripts/assemble-image.sh" ]] || die "missing assemble-image.sh"
 [[ -x "$repo_root/scripts/build-rootfs.sh" ]] || die "missing build-rootfs.sh"
+grep -qxF 'QEMU_MEMORY ?= 1G' "$repo_root/Makefile" || die "make qemu default memory must be 1G"
 
 stage_base="$(mktemp -d "$repo_root/build/task7-qemu.XXXXXX")"
 cleanup() {
@@ -47,4 +48,3 @@ for phrase in \
 done
 
 echo "ok"
-
