@@ -17,6 +17,7 @@ Minimal Alpine-style x86_64 server distro with:
 - The guest boots through OVMF, Limine, kernel, initramfs, and `s6-linux-init`.
 - Rootfs staging, Limine staging, initramfs generation, and image assembly are scripted.
 - A `Makefile` is now available for short commands.
+- QEMU defaults to bridged networking through a repo-managed TAP helper, with NAT still available as an explicit fallback.
 - Build commands and source URLs are recorded in `build/build.manifest`.
 
 ## Remaining work
@@ -37,7 +38,9 @@ make build
 
 Host build prerequisites for the real build include `help2man` and GNU `indent` in addition to the existing toolchain.
 
-`make qemu` defaults to 1 GiB of RAM and 2 CPU cores.
+`make qemu` defaults to 1 GiB of RAM, 2 CPU cores, and bridged networking through a repo-managed TAP helper.
+It prefers `br0` when present, otherwise it auto-selects another existing Linux bridge.
+Use `QEMU_NET_MODE=nat` to fall back to user-mode networking with SSH forwarding.
 
 Clean build from scratch:
 
@@ -56,7 +59,7 @@ make build-log
 Boot in QEMU with live serial output:
 
 ```bash
-QEMU_HOSTFWD_PORT=none make boot
+make boot
 ```
 
 Pack the current payload into the raw image:
@@ -94,5 +97,5 @@ make build-grep
 Run the guest image directly:
 
 ```bash
-QEMU_HOSTFWD_PORT=none scripts/boot-image.sh --qemu dist/qos-x86_64.raw
+scripts/boot-image.sh --qemu dist/qos-x86_64.raw
 ```

@@ -55,6 +55,7 @@ make image >/dev/null
 
 qemu_log="$test_dir/qemu.log"
 QEMU_HOSTFWD_PORT="$port" \
+QEMU_NET_MODE=nat \
 QEMU_SERIAL_MODE=file \
 QEMU_LOG_FILE="$qemu_log" \
   "$script_dir/run-qemu.sh" "$image_path" >/dev/null 2>&1 &

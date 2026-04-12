@@ -15,6 +15,9 @@ repo_root="$(cd "$here/.." && pwd -P)"
 [[ -x "$repo_root/scripts/build-rootfs.sh" ]] || die "missing build-rootfs.sh"
 grep -qxF 'QEMU_MEMORY ?= 1G' "$repo_root/Makefile" || die "make qemu default memory must be 1G"
 grep -qxF 'QEMU_CPUS ?= 2' "$repo_root/Makefile" || die "make qemu default cpu count must be 2"
+grep -qxF 'QEMU_NET_MODE ?= tap' "$repo_root/Makefile" || die "make qemu default network mode must be tap"
+grep -qxF 'QEMU_BRIDGE_IFACE ?= auto' "$repo_root/Makefile" || die "make qemu default bridge interface must be auto"
+[[ -x "$repo_root/scripts/qemu-tap.sh" ]] || die "missing qemu tap helper"
 
 stage_base="$(mktemp -d "$repo_root/build/task7-qemu.XXXXXX")"
 cleanup() {
@@ -44,8 +47,18 @@ for phrase in \
   "Linux: kernel handoff to init" \
   "s6: supervision started" \
   "network: DHCP lease acquired on eth0" \
-  "dropbear: listening on port 22"; do
+  "dropbear: listening on port 22" \
+  "network: tap via helper"; do
   grep -qxF "$phrase" "$log_file" || die "missing boot marker: $phrase"
 done
+
+nat_log="$stage_base/nat.log"
+QEMU_RUN_MOCK=1 \
+QEMU_NET_MODE=nat \
+QEMU_HOSTFWD_PORT=2222 \
+QEMU_LOG_FILE="$nat_log" \
+QEMU_IMAGE="$image_output_dir/$image_name" \
+  "$repo_root/scripts/run-qemu.sh" >/dev/null
+grep -qxF 'network: nat via 127.0.0.1:2222 -> 22' "$nat_log" || die "missing nat fallback marker"
 
 echo "ok"

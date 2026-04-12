@@ -10,6 +10,33 @@ root="$(repo_root)"
 image_path="${QEMU_IMAGE:-${1:-}}"
 log_file="${QEMU_LOG_FILE:-$root/build/qemu/serial.log}"
 serial_mode="${QEMU_SERIAL_MODE:-file}"
+net_mode="${QEMU_NET_MODE:-tap}"
+bridge_iface="${QEMU_BRIDGE_IFACE:-auto}"
+tap_iface="${QEMU_TAP_IFACE:-q${BASHPID:-$$}}"
+
+select_bridge_iface() {
+  local requested="${1:-br0}"
+  local candidate
+
+  if [[ "$requested" != "auto" && -d "/sys/class/net/$requested/bridge" ]]; then
+    printf '%s\n' "$requested"
+    return 0
+  fi
+
+  if [[ -d "/sys/class/net/br0/bridge" ]]; then
+    printf '%s\n' "br0"
+    return 0
+  fi
+
+  for candidate in /sys/class/net/*; do
+    candidate="${candidate##*/}"
+    [[ -d "/sys/class/net/$candidate/bridge" ]] || continue
+    printf '%s\n' "$candidate"
+    return 0
+  done
+
+  return 1
+}
 
 [[ -n "$image_path" ]] || die "usage: $0 <image-path>"
 [[ -f "$image_path" ]] || die "missing image artifact: $image_path"
@@ -19,6 +46,15 @@ if [[ "$serial_mode" == "file" ]]; then
 fi
 
 if [[ "${QEMU_RUN_MOCK:-0}" == "1" ]]; then
+  if [[ "$net_mode" == "nat" ]]; then
+    if [[ -n "${QEMU_HOSTFWD_PORT:-2222}" && "${QEMU_HOSTFWD_PORT:-2222}" != "none" ]]; then
+      network_line="network: nat via 127.0.0.1:${QEMU_HOSTFWD_PORT:-2222} -> 22"
+    else
+      network_line="network: nat without host forwarding"
+    fi
+  else
+    network_line="network: tap via helper"
+  fi
   cat > "$log_file" <<'EOF'
 Limine: booting Linux
 Linux: kernel handoff to init
@@ -26,6 +62,7 @@ s6: supervision started
 network: DHCP lease acquired on eth0
 dropbear: listening on port 22
 EOF
+  printf '%s\n' "$network_line" >> "$log_file"
   echo "$log_file"
   exit 0
 fi
@@ -76,11 +113,29 @@ else
   qemu_serial_arg=(-serial "$serial_mode")
 fi
 
-if [[ -n "$hostfwd_port" && "$hostfwd_port" != "none" ]]; then
-  qemu_netdev_arg=(-netdev "user,id=net0,hostfwd=tcp:127.0.0.1:${hostfwd_port}-:22")
-else
-  qemu_netdev_arg=(-netdev "user,id=net0")
-fi
+case "$net_mode" in
+  tap)
+    bridge_iface_resolved="$(select_bridge_iface "$bridge_iface")" || die "missing bridge interface: $bridge_iface"
+    qemu_tap_setup_script="$script_dir/qemu-tap.sh"
+    [[ -x "$qemu_tap_setup_script" ]] || die "missing tap helper: $qemu_tap_setup_script"
+    "$qemu_tap_setup_script" setup "$tap_iface" "$bridge_iface_resolved"
+    cleanup_tap() {
+      "$qemu_tap_setup_script" cleanup "$tap_iface" >/dev/null 2>&1 || true
+    }
+    trap cleanup_tap EXIT INT TERM
+    qemu_netdev_arg=(-netdev "tap,id=net0,ifname=${tap_iface},script=no,downscript=no")
+    ;;
+  nat)
+    if [[ -n "$hostfwd_port" && "$hostfwd_port" != "none" ]]; then
+      qemu_netdev_arg=(-netdev "user,id=net0,hostfwd=tcp:127.0.0.1:${hostfwd_port}-:22")
+    else
+      qemu_netdev_arg=(-netdev "user,id=net0")
+    fi
+    ;;
+  *)
+    die "unsupported QEMU_NET_MODE: $net_mode"
+    ;;
+esac
 
 qemu-system-x86_64 \
   -machine q35,accel=kvm:tcg \
