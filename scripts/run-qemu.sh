@@ -13,6 +13,7 @@ serial_mode="${QEMU_SERIAL_MODE:-file}"
 net_mode="${QEMU_NET_MODE:-tap}"
 bridge_iface="${QEMU_BRIDGE_IFACE:-auto}"
 tap_iface="${QEMU_TAP_IFACE:-q${BASHPID:-$$}}"
+boot_disk="${QEMU_BOOT_DISK:-primary}"  # primary or installed
 
 select_bridge_iface() {
   local requested="${1:-br0}"
@@ -38,8 +39,10 @@ select_bridge_iface() {
   return 1
 }
 
-[[ -n "$image_path" ]] || die "usage: $0 <image-path>"
-[[ -f "$image_path" ]] || die "missing image artifact: $image_path"
+[[ -n "$image_path" || -n "${QEMU_ISO:-}" ]] || die "usage: $0 <image-path>"
+if [[ -n "$image_path" ]]; then
+  [[ -f "$image_path" ]] || die "missing image artifact: $image_path"
+fi
 
 if [[ "$serial_mode" == "file" ]]; then
   mkdir -p "$(dirname "$log_file")"
@@ -145,20 +148,55 @@ case "$net_mode" in
     ;;
 esac
 
-qemu-system-x86_64 \
-  -machine q35,accel=kvm:tcg \
-  -cpu max \
-  -m "${QEMU_MEMORY:-1G}" \
-  -smp "${QEMU_CPUS:-2}" \
-  -drive if=pflash,format=raw,unit=0,readonly=on,file="$ovmf_code" \
-  -drive if=pflash,format=raw,unit=1,file="$ovmf_vars_runtime" \
-  -drive if=none,file="$image_path",id=bootdisk,format=raw \
-  -device virtio-blk-pci,drive=bootdisk,bootindex=0 \
-  "${qemu_netdev_arg[@]}" \
-  -device virtio-net-pci,netdev=net0 \
-  -chardev socket,id=qga,path="$root/build/qemu/qga.sock",server=on,wait=off \
-  -device virtio-serial-pci \
-  -device virtserialport,chardev=qga,name=org.qemu.guest_agent.0 \
-  -drive if=none,file="$extra_disk",format=raw,if=virtio \
-  "${qemu_serial_arg[@]}" \
+qemu_system_args=(
+  -machine q35,accel=kvm:tcg
+  -cpu max
+  -m "${QEMU_MEMORY:-1G}"
+  -smp "${QEMU_CPUS:-2}"
+  -drive if=pflash,format=raw,unit=0,readonly=on,file="$ovmf_code"
+  -drive if=pflash,format=raw,unit=1,file="$ovmf_vars_runtime"
+  "${qemu_netdev_arg[@]}"
+  -device virtio-net-pci,netdev=net0
+  -chardev socket,id=qga,path="$root/build/qemu/qga.sock",server=on,wait=off
+  -device virtio-serial-pci
+  -device virtserialport,chardev=qga,name=org.qemu.guest_agent.0
+  "${qemu_serial_arg[@]}"
   -display none
+)
+
+# Boot from ISO or raw disk based on boot_disk setting
+if [[ "$boot_disk" == "installed" ]]; then
+  # Boot from installed disk (secondary disk)
+  qemu_system_args=(
+    -drive if=none,file="$image_path",id=bootdisk,format=raw
+    -device virtio-blk-pci,drive=bootdisk,bootindex=1
+    "${qemu_system_args[@]}"
+    -drive if=none,file="$extra_disk",format=raw,id=extradisk
+    -device virtio-blk-pci,drive=extradisk,bootindex=0
+  )
+elif [[ -f "${QEMU_ISO:-}" ]]; then
+  # Boot from ISO (live CD)
+  qemu_system_args=(
+    -boot d
+    "${qemu_system_args[@]}"
+    -drive file="${QEMU_ISO}",media=cdrom
+    -drive if=none,file="$extra_disk",format=raw,id=extradisk
+    -device virtio-blk-pci,drive=extradisk,bootindex=1
+  )
+else
+  # Boot from raw disk image (primary disk)
+  qemu_system_args=(
+    -drive if=none,file="$image_path",id=bootdisk,format=raw
+    -device virtio-blk-pci,drive=bootdisk,bootindex=0
+    "${qemu_system_args[@]}"
+    -drive if=none,file="$extra_disk",format=raw,id=extradisk
+    -device virtio-blk-pci,drive=extradisk,bootindex=1
+  )
+fi
+
+echo "Booting: $boot_disk disk"
+if [[ -f "${QEMU_ISO:-}" ]]; then
+  echo "  ISO: ${QEMU_ISO}"
+fi
+
+exec qemu-system-x86_64 "${qemu_system_args[@]}"

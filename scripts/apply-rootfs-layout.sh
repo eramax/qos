@@ -34,8 +34,18 @@ done < "$paths_file"
 
 # Immutable rootfs should expose BusyBox applets broadly, then override the
 # few entrypoints we care about.
+#
+# CRITICAL: We must check if a real binary already exists before linking.
+# If a package (like e2fsprogs) installed a real binary, we MUST NOT overwrite it
+# with a busybox symlink.
 while IFS= read -r applet; do
   [[ "$applet" == busybox ]] && continue
+  
+  # Skip if a real file/binary is already provided by a package
+  if [[ -e "$rootfs/bin/$applet" ]] || [[ -e "$rootfs/sbin/$applet" ]]; then
+    continue
+  fi
+
   ln -sfn busybox "$rootfs/bin/$applet"
   ln -sfn busybox "$rootfs/sbin/$applet"
 done < <("$host_busybox" --list)

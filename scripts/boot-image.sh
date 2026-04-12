@@ -3,17 +3,23 @@ set -euo pipefail
 IFS=$'\n\t'
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
-# shellcheck source=/dev/null
 source "$script_dir/lib/common.sh"
 
 root="$(repo_root)"
 mode="qemu"
 image_path="${BOOT_IMAGE:-${1:-}}"
+iso_path=""
 
 case "${1:-}" in
   --qemu)
     mode="qemu"
     image_path="${BOOT_IMAGE:-${2:-}}"
+    ;;
+  --qemu-iso)
+    mode="qemu-iso"
+    iso_path="${2:-}"
+    [[ -n "$iso_path" ]] || die "usage: $0 --qemu-iso <iso-path>"
+    [[ -f "$iso_path" ]] || die "missing ISO: $iso_path"
     ;;
   --smoke)
     mode="smoke"
@@ -23,12 +29,16 @@ case "${1:-}" in
     ;;
   *)
     if [[ "${1:-}" == --* ]]; then
-      die "usage: $0 [--qemu|--smoke] <image-path>"
+      die "usage: $0 [--qemu|--qemu-iso|--smoke] <image-path>"
     fi
     ;;
 esac
 
-[[ -n "$image_path" ]] || die "usage: $0 [--qemu|--smoke] <image-path>"
+if [[ "$mode" == "qemu-iso" ]]; then
+  QEMU_SERIAL_MODE=stdio QEMU_ISO="$iso_path" exec "$script_dir/run-qemu.sh" ""
+fi
+
+[[ -n "$image_path" ]] || die "usage: $0 [--qemu|--qemu-iso|--smoke] <image-path>"
 [[ -f "$image_path" ]] || die "missing image artifact: $image_path"
 
 if [[ "$mode" == "qemu" ]]; then

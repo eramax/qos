@@ -39,27 +39,29 @@ make image       # Assemble 64MB image
 ### Boot
 
 ```bash
-# Boot in QEMU (default: 1GB RAM, 2 CPU, bridged networking)
+# Boot raw disk image (primary testing)
 make qemu
 
-# Boot with serial output to terminal
+# Boot live ISO (requires make iso)
 make boot
+
+# Boot from installed disk (after qos-install)
+make qwen2
 
 # Smoke boot with log capture
 make smoke
-
-# Boot, SSH in, and test
-make ssh-test
 ```
 
 ### Flash to Disk
 
 ```bash
-# Flash 64MB image to disk
+# Flash 256MB image to disk
 sudo dd if=dist/qos-x86_64.raw of=/dev/sdX bs=4M status=progress
 
-# Expand state partition to use full disk
-sudo ./scripts/qos-expand.sh /dev/sdX
+# Or install from running system with GPT partitioning
+ssh root@<ip>
+qos-install --auto /dev/sda
+# Creates: EFI (64MB, GPT EF00) + Root (128MB) + Var (remaining)
 ```
 
 ## Documentation

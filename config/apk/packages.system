@@ -24,5 +24,9 @@ dcron
 # QEMU guest agent
 qemu-guest-agent
 
-# Filesystem tools (needed by qos-install)
+# Filesystem tools (needed by qos-install for GPT and mkfs)
+# e2fsprogs-extra provides mke2fs, mkfs.ext2/3/4, chattr, lsattr
 e2fsprogs
+e2fsprogs-extra
+dosfstools
+sgdisk

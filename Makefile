@@ -11,10 +11,11 @@ QEMU_CPUS ?= 2
 QEMU_NET_MODE ?= tap
 QEMU_BRIDGE_IFACE ?= auto
 QEMU_HOSTFWD_PORT ?= none
+QEMU_BOOT_DISK ?= primary  # primary or installed
 
 ROOT := $(shell pwd -P)
 
-.PHONY: help build full build-log build-grep rootfs services kernel initramfs boot-limine image boot qemu smoke ssh-test clean
+.PHONY: help build full build-log build-grep rootfs services kernel initramfs boot-limine iso image boot qemu qwen2 smoke ssh-test clean
 
 help:
 	@printf '%s\n' \
@@ -27,9 +28,11 @@ help:
 		'kernel       - build the kernel only' \
 		'initramfs    - build the initramfs only' \
 		'boot-limine  - stage Limine plus kernel/initramfs into build/boot' \
+		'iso          - build bootable live CD ISO' \
 		'image        - assemble the raw disk image from existing payloads' \
-		'boot         - boot $(QEMU_IMAGE) in QEMU with live serial output' \
-		'qemu         - boot $(QEMU_IMAGE) in QEMU with live serial output' \
+		'boot         - boot live ISO in QEMU (requires make iso)' \
+		'qemu         - boot raw disk image in QEMU (primary disk)' \
+		'qemu2        - boot from installed disk (secondary disk)' \
 		'smoke        - boot $(QEMU_IMAGE) and capture serial output to a log' \
 		'ssh-test     - boot the image and SSH in to install/run btop' \
 		'clean        - remove build outputs'
@@ -62,13 +65,21 @@ initramfs: rootfs services
 boot-limine: kernel initramfs
 	@LIMINE_STAGE_DIR=$(ROOT)/build/boot KERNEL_BUILD_DIR=$(ROOT)/build/kernel INITRAMFS_BUILD_DIR=$(ROOT)/build/initramfs bash scripts/install-limine.sh
 
+iso: boot-limine
+	@ISO_OUTPUT_DIR=$(ROOT)/dist BOOT_STAGE_DIR=$(ROOT)/build/boot bash scripts/build-iso.sh
+
 image:
 	@IMAGE_BUILD_DIR=$(ROOT)/build/image IMAGE_OUTPUT_DIR=$(ROOT)/dist ROOTFS_DIR=$(ROOT)/build/rootfs BOOT_STAGE_DIR=$(ROOT)/build/boot bash scripts/assemble-image.sh
 
-boot: qemu
+boot:
+	@echo "Booting raw disk image (live ISO support in progress)..."
+	@QEMU_BOOT_DISK=primary QEMU_MEMORY=$(QEMU_MEMORY) QEMU_CPUS=$(QEMU_CPUS) QEMU_NET_MODE=$(QEMU_NET_MODE) QEMU_BRIDGE_IFACE=$(QEMU_BRIDGE_IFACE) QEMU_HOSTFWD_PORT=$(QEMU_HOSTFWD_PORT) scripts/boot-image.sh --qemu $(QEMU_IMAGE)
 
 qemu:
-	@QEMU_MEMORY=$(QEMU_MEMORY) QEMU_CPUS=$(QEMU_CPUS) QEMU_NET_MODE=$(QEMU_NET_MODE) QEMU_BRIDGE_IFACE=$(QEMU_BRIDGE_IFACE) QEMU_HOSTFWD_PORT=$(QEMU_HOSTFWD_PORT) scripts/boot-image.sh --qemu $(QEMU_IMAGE)
+	@QEMU_BOOT_DISK=primary QEMU_MEMORY=$(QEMU_MEMORY) QEMU_CPUS=$(QEMU_CPUS) QEMU_NET_MODE=$(QEMU_NET_MODE) QEMU_BRIDGE_IFACE=$(QEMU_BRIDGE_IFACE) QEMU_HOSTFWD_PORT=$(QEMU_HOSTFWD_PORT) scripts/boot-image.sh --qemu $(QEMU_IMAGE)
+
+qemu2:
+	@QEMU_BOOT_DISK=installed QEMU_MEMORY=$(QEMU_MEMORY) QEMU_CPUS=$(QEMU_CPUS) QEMU_NET_MODE=$(QEMU_NET_MODE) QEMU_BRIDGE_IFACE=$(QEMU_BRIDGE_IFACE) QEMU_HOSTFWD_PORT=$(QEMU_HOSTFWD_PORT) scripts/boot-image.sh --qemu $(QEMU_IMAGE)
 
 smoke:
 	@scripts/boot-image.sh --smoke $(QEMU_IMAGE)
