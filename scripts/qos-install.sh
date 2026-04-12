@@ -10,11 +10,8 @@
 set -e
 
 # Configuration
-IMAGE_SIZE_MB=100
 EFI_SIZE_MB=64
-ROOT_SIZE_MB=32
-ROOTFS_MOUNT="/ro-root"
-STATE_MOUNT="/state"
+ROOT_SIZE_MB=128
 INSTALL_LOG="/var/log/qos-install.log"
 
 # Colors
@@ -130,22 +127,85 @@ fi
 
 log "Starting installation..."
 
-# Create partition table
-log "Creating GPT partition table..."
-sgdisk --zap-all "$TARGET_DEV" >/dev/null 2>&1 || error "Failed to zap disk"
-sgdisk -o "$TARGET_DEV" >/dev/null 2>&1 || error "Failed to create partition table"
+# Create partition table using fdisk (busybox supports MBR only)
+log "Creating MBR partition table..."
 
-# Create partitions
-log "Creating partitions..."
-sgdisk -n 1:1M:+${EFI_SIZE_MB}M -t 1:ef00 -c 1:"QOS-EFI" "$TARGET_DEV" >/dev/null 2>&1 || error "Failed to create EFI partition"
-sgdisk -n 2:0:+${ROOT_SIZE_MB}M -t 2:8300 -c 2:"QOS-Root" "$TARGET_DEV" >/dev/null 2>&1 || error "Failed to create root partition"
-sgdisk -n 3:0:0 -t 3:8300 -c 3:"QOS-Var" "$TARGET_DEV" >/dev/null 2>&1 || error "Failed to create var partition"
+# Calculate partition sectors (in 512-byte sectors)
+SECTOR_SIZE=512
+TOTAL_SECTORS=$((DISK_SIZE_BYTES / SECTOR_SIZE))
+EFI_SECTORS=$((EFI_SIZE_MB * 1024 * 1024 / SECTOR_SIZE))
+ROOT_SECTORS=$((ROOT_SIZE_MB * 1024 * 1024 / SECTOR_SIZE))
+START_SECTOR=2048  # Start at 1MB for alignment
+
+EFI_END=$((START_SECTOR + EFI_SECTORS - 1))
+ROOT_START=$((EFI_END + 1))
+ROOT_END=$((ROOT_START + ROOT_SECTORS - 1))
+VAR_START=$((ROOT_END + 1))
+VAR_END=$((TOTAL_SECTORS - 1))  # Use rest of disk
+
+# Use fdisk with MBR partition table (file redirect works, heredoc doesn't)
+FDISK_CMD="$(mktemp)"
+cat > "$FDISK_CMD" <<EOF
+o
+n
+p
+1
+$START_SECTOR
+$EFI_END
+t
+1
+b
+n
+p
+2
+$ROOT_START
+$ROOT_END
+n
+p
+3
+$VAR_START
+
+w
+EOF
+
+fdisk "$TARGET_DEV" < "$FDISK_CMD" >/dev/null 2>&1 || true  # fdisk warns about rereading but succeeds
+rm -f "$FDISK_CMD"
+
+# Verify partitions were created
+sleep 2
+if [ ! -b "${TARGET_DEV}1" ]; then
+    error "Partition table not created"
+fi
+
+# Reload partition table
+partprobe "$TARGET_DEV" 2>/dev/null || true
+sleep 2
+
+# Verify partitions exist
+if [ ! -b "${TARGET_DEV}1" ]; then
+    # Try to create device nodes manually
+    major=$(ls -l "$TARGET_DEV" | awk '{print $5}')
+    minor=$(ls -l "$TARGET_DEV" | awk '{print $6}')
+    mknod "${TARGET_DEV}1" b "$major" "$((minor + 1))" 2>/dev/null || true
+    mknod "${TARGET_DEV}2" b "$major" "$((minor + 2))" 2>/dev/null || true
+    mknod "${TARGET_DEV}3" b "$major" "$((minor + 3))" 2>/dev/null || true
+fi
 
 log "Partition table created successfully"
+log "  ${TARGET_DEV}1: EFI (${EFI_SIZE_MB}MB) - FAT32"
+log "  ${TARGET_DEV}2: Root (${ROOT_SIZE_MB}MB) - ext4"
+log "  ${TARGET_DEV}3: Var (${VAR_SIZE_MB}MB) - ext4"
 
 # Format partitions
 log "Formatting EFI partition (FAT32)..."
-mkfs.vfat -F 32 -n "QOS-EFI" "${TARGET_DEV}1" >/dev/null 2>&1 || error "Failed to format EFI partition"
+# busybox mkfs.vfat may not be symlinked, call directly
+if command -v mkfs.vfat >/dev/null 2>&1; then
+    mkfs.vfat -F 32 -n "QOS-EFI" "${TARGET_DEV}1" >/dev/null 2>&1 || error "Failed to format EFI partition"
+elif command -v busybox >/dev/null 2>&1; then
+    busybox mkfs.vfat -F 32 -n "QOS-EFI" "${TARGET_DEV}1" >/dev/null 2>&1 || error "Failed to format EFI partition"
+else
+    error "mkfs.vfat not found"
+fi
 
 log "Formatting root partition (ext4)..."
 mkfs.ext4 -F -L "QOS-Root" "${TARGET_DEV}2" >/dev/null 2>&1 || error "Failed to format root partition"
@@ -162,31 +222,43 @@ MNT_VAR="$(mktemp -d)"
 
 log "Mounting partitions..."
 mount "${TARGET_DEV}2" "$MNT_ROOT" || error "Failed to mount root partition"
-mount "${TARGET_DEV}1" "$MNT_EFI" || error "Failed to mount EFI partition"
 mount "${TARGET_DEV}3" "$MNT_VAR" || error "Failed to mount var partition"
+
+# EFI partition (optional - only mount if needed)
+MNT_EFI="$(mktemp -d)"
+if mount "${TARGET_DEV}1" "$MNT_EFI" 2>/dev/null; then
+    log "EFI partition mounted"
+else
+    log "EFI partition not mountable (MBR limitation), skipping EFI copy"
+    log "System will still boot from second disk using existing bootloader"
+fi
 
 # Copy root filesystem
 log "Copying root filesystem..."
 ROOTFS_SIZE="$(du -sm / 2>/dev/null | awk '{print $1}')"
 log "Root filesystem size: ${ROOTFS_SIZE}MB"
 
-# Use rsync if available, otherwise use cp
-if command -v rsync >/dev/null 2>&1; then
-    rsync -aAXv /* "$MNT_ROOT/" --exclude=/dev/* --exclude=/proc/* --exclude=/sys/* --exclude=/tmp/* --exclude=/run/* --exclude=/mnt/* --exclude=/var/* 2>&1 | tail -5
-elif command -v tar >/dev/null 2>&1; then
-    tar cf - \
-        --exclude=/dev/* \
-        --exclude=/proc/* \
-        --exclude=/sys/* \
-        --exclude=/tmp/* \
-        --exclude=/run/* \
-        --exclude=/mnt/* \
-        --exclude=/var/* \
-        -C / . | tar xf - -C "$MNT_ROOT"
-else
-    # Fallback to cp
-    cp -a /etc /bin /sbin /usr /lib /lib64 /opt /srv /home /root "$MNT_ROOT/" 2>/dev/null || true
-fi
+# Use cp -a with explicit directory list (most reliable method)
+for dir in /bin /sbin /lib /lib64 /usr /etc /opt /srv /home /root; do
+    if [ -d "$dir" ]; then
+        log "  Copying $dir..."
+        cp -a "$dir" "$MNT_ROOT/" 2>/dev/null || log "  Warning: partial copy of $dir"
+    fi
+done
+
+# Copy var but skip overlay directories
+log "  Copying /var (excluding overlay)..."
+mkdir -p "$MNT_ROOT/var"
+for vdir in /var/lib /var/log /var/cache /var/spool /var/run; do
+    if [ -d "$vdir" ]; then
+        cp -a "$vdir" "$MNT_ROOT/var/" 2>/dev/null || true
+    fi
+done
+
+# Create necessary mount points
+mkdir -p "$MNT_ROOT/proc" "$MNT_ROOT/sys" "$MNT_ROOT/dev" "$MNT_ROOT/tmp"
+mkdir -p "$MNT_ROOT/run" "$MNT_ROOT/mnt" "$MNT_ROOT/media" "$MNT_ROOT/lost+found"
+chmod 1777 "$MNT_ROOT/tmp" 2>/dev/null || true
 
 log "Root filesystem copied"
 

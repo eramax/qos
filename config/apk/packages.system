@@ -1,6 +1,4 @@
 # System packages - essential server utilities only
-# Removed: bash (ash is sufficient), uutils-coreutils (busybox covers it),
-#          btop (too heavy), nano (vi in busybox is enough), chrony (too complex)
 
 # Core utilities
 curl
@@ -17,11 +15,14 @@ s6-rc
 # Compatibility
 gcompat
 
-# Monitoring (lightweight alternatives)
+# Monitoring
 htop
 
 # Job scheduling
 dcron
 
-# QEMU guest agent (for host integration)
+# QEMU guest agent
 qemu-guest-agent
+
+# Filesystem tools (needed by qos-install)
+e2fsprogs

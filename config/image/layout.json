@@ -2,8 +2,8 @@
   "boot_mode": "uefi",
   "disk_format": "raw",
   "partition_table": "gpt",
-  "image_size": "256M",
-  "description": "Optimized 256MB base image with 64MB EFI partition for reliable UEFI boot",
+  "image_size": "384M",
+  "description": "Optimized 320MB base image with 128MB root for development tools",
   "partitions": [
     {
       "name": "efi",
@@ -18,8 +18,8 @@
       "mount": "/",
       "slot": "A",
       "immutable": true,
-      "size": "48M",
-      "description": "Immutable root filesystem slot A"
+      "size": "128M",
+      "description": "Immutable root filesystem slot A (enough for dev tools)"
     },
     {
       "name": "root-b",
@@ -27,7 +27,7 @@
       "mount": "/",
       "slot": "B",
       "immutable": true,
-      "size": "48M",
+      "size": "128M",
       "description": "Immutable root filesystem slot B (for OTA updates)"
     },
     {
@@ -36,13 +36,13 @@
       "mount": "/var",
       "mutable": true,
       "size": "auto",
-      "description": "State partition (auto-sized from remaining space, expandable via qos-install)"
+      "description": "State partition (auto-sized from remaining space)"
     }
   ],
   "install_tool": "qos-install",
   "flash_instructions": {
     "direct_flash": "dd if=qos-x86_64.raw of=/dev/sdX bs=4M status=progress",
     "install_to_disk": "qos-install --auto /dev/sdX",
-    "note": "Image is 256MB. Use qos-install to expand to larger disk with proper partitioning."
+    "note": "Image is 320MB. Use qos-install to expand to larger disk."
   }
 }
