@@ -18,6 +18,19 @@ etc_dir="$rootfs/etc"
 chmod u+w "$etc_dir"
 chmod u+w "$rootfs/root"
 
+# Set hostname.
+printf 'qos\n' > "$etc_dir/hostname"
+
+# Generate stable dropbear host keys so the SSH fingerprint survives rebuilds.
+mkdir -p "$etc_dir/dropbear"
+dbkey="$rootfs/usr/bin/dropbearkey"
+if [[ -x "$dbkey" ]] && ! [[ -f "$etc_dir/dropbear/dropbear_ed25519_host_key" ]]; then
+  "$dbkey" -t ed25519 -f "$etc_dir/dropbear/dropbear_ed25519_host_key" >/dev/null 2>&1 || true
+fi
+if [[ -x "$dbkey" ]] && ! [[ -f "$etc_dir/dropbear/dropbear_rsa_host_key" ]]; then
+  "$dbkey" -t rsa -f "$etc_dir/dropbear/dropbear_rsa_host_key" >/dev/null 2>&1 || true
+fi
+
 # Set root password to "root" for dev/test access.
 # Uses openssl to generate a SHA-512 crypt hash; awk writes it safely
 # (avoids sed misinterpreting $ in the hash).

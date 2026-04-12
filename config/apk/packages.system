@@ -1,8 +1,9 @@
 # System packages layered on top of the base image.
 bash
 curl
-execline
 dropbear
+execline
+gcompat
 iproute2
 nftables
 s6-linux-init
