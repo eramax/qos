@@ -104,6 +104,7 @@ install -m 0755 "$apk_static_dir/sbin/apk.static" "$apk_static_path"
 
 mkdir -p "$rootfs/etc/apk/keys"
 bsdtar -xzf "$alpine_keys_pkg" -C "$rootfs" etc/apk/keys
+install -m 0644 "$repos_file" "$rootfs/etc/apk/repositories"
 
 if [[ "${ROOTFS_SKIP_APK:-0}" == "1" ]]; then
   "$script_dir/apply-rootfs-layout.sh" "$rootfs"
