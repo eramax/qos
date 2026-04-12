@@ -36,6 +36,6 @@ IMAGE_OUTPUT_DIR="$stage_base/dist" \
 grep -qxF "command: $repo_root/build.sh BUILD_MOCK=0" "$repo_root/build/build.manifest" || die "manifest missing top-level build command"
 grep -qxF "source: kernel https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.19.6.tar.xz" "$repo_root/build/build.manifest" || die "manifest missing kernel source URL"
 grep -qxF "source: limine https://github.com/limine-bootloader/limine.git#v10.x-binary" "$repo_root/build/build.manifest" || die "manifest missing limine source URL"
-grep -qxF "source: alpine-repo https://dl-cdn.alpinelinux.org/alpine/v3.22/main" "$repo_root/build/build.manifest" || die "manifest missing alpine repo URL"
+grep -qxF "source: alpine-repo https://dl-cdn.alpinelinux.org/alpine/v3.23/main" "$repo_root/build/build.manifest" || die "manifest missing alpine repo URL"
 
 echo "ok"

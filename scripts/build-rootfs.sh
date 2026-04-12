@@ -112,7 +112,9 @@ if [[ "${ROOTFS_SKIP_APK:-0}" == "1" ]]; then
   exit 0
 fi
 
-fakeroot -- "$apk_static_path" --root "$rootfs" --initdb --arch "$apk_arch" "${repo_args[@]}" --keys-dir "$rootfs/etc/apk/keys" add --no-cache --no-scripts "${pkg_args[@]}"
+# Alpine 3.23's apk-tools requires explicit usermode initdb when staging a rootfs
+# as a non-root user. This keeps the build working under the repo's non-root flow.
+fakeroot -- "$apk_static_path" --root "$rootfs" --initdb --usermode --arch "$apk_arch" "${repo_args[@]}" --keys-dir "$rootfs/etc/apk/keys" add --no-cache --no-scripts "${pkg_args[@]}"
 
 "$script_dir/apply-rootfs-layout.sh" "$rootfs"
 
