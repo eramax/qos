@@ -1,345 +1,351 @@
 #!/bin/sh
-# qos-install - Install QOS to disk with GPT partitioning
+# qos-install - Install QOS from live environment to target disk
 # Usage: qos-install [--auto] <device>
-#   --auto    Non-interactive mode (no prompts)
-#   <device>  Target disk device (e.g., /dev/sda, /dev/vda)
+#
+# Requires root. Partitions the target disk with GPT, formats with
+# FAT32 (EFI) + ext4 (root, state), and copies the running system.
+# No e2tools or mtools needed for population — uses mount + tar/cp.
 
-set -e
+set -eu
+export PATH=/usr/sbin:/sbin:/usr/bin:/bin
 
-# Ensure we can find system tools in /sbin and /usr/sbin
-export PATH=/usr/sbin:/sbin:/usr/bin:/bin:$PATH
-
-# Configuration
 EFI_SIZE_MB=64
 ROOT_SIZE_MB=128
-INSTALL_LOG="/var/log/qos-install.log"
+INSTALL_LOG="/tmp/qos-install.log"
 
 if [ -t 1 ]; then
-    RED='\033[0;31m'
-    GREEN='\033[0;32m'
-    YELLOW='\033[1;33m'
-    BLUE='\033[0;34m'
-    NC='\033[0m'
+    RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
+    BLUE='\033[0;34m'; NC='\033[0m'
 else
-    RED='' GREEN='' YELLOW='' BLUE='' NC=''
+    RED=''; GREEN=''; YELLOW=''; BLUE=''; NC=''
 fi
 
 AUTO_MODE=0
 TARGET_DEV=""
 
-log() {
-    echo "[$(date -Iseconds)] $*" >> "$INSTALL_LOG" 2>/dev/null || true
-    printf "${BLUE}[INSTALL]${NC} %s\n" "$*"
-}
-
-error() {
-    printf "${RED}[ERROR]${NC} %s\n" "$*" >&2
-    log "ERROR: $*"
-    exit 1
-}
-
-warn() {
-    printf "${YELLOW}[WARN]${NC} %s\n" "$*"
-    log "WARN: $*"
-}
+log()   { printf "${BLUE}[INSTALL]${NC} %s\n" "$*"; printf "[%s] %s\n" "$(date -Iseconds 2>/dev/null || date)" "$*" >> "$INSTALL_LOG" 2>/dev/null || true; }
+error() { printf "${RED}[ERROR]${NC} %s\n" "$*" >&2; printf "[%s] ERROR: %s\n" "$(date -Iseconds 2>/dev/null || date)" "$*" >> "$INSTALL_LOG" 2>/dev/null || true; exit 1; }
+warn()  { printf "${YELLOW}[WARN]${NC} %s\n" "$*"; }
+ok()    { printf "${GREEN}[OK]${NC} %s\n" "$*"; }
 
 usage() {
     cat <<EOF
 Usage: qos-install [--auto] <device>
 
-Install QOS to disk with GPT partition layout (UEFI compatible).
+Install QOS to a disk using GPT / UEFI layout.
 
 Options:
-  --auto    Non-interactive mode (no prompts)
-  <device>  Target disk device (e.g., /dev/sda, /dev/vda)
+  --auto    Non-interactive (no confirmation prompt)
+  <device>  Target block device (e.g. /dev/vda, /dev/sda)
 
-Partition Layout (GPT):
-  EFI:   ${EFI_SIZE_MB}MB  (type EF00, FAT32)
-  Root:  ${ROOT_SIZE_MB}MB  (type 8300, ext4)
-  Var:   Remaining space (type 8300, ext4)
+Partition layout created:
+  <dev>1   ${EFI_SIZE_MB} MB   FAT32   label=QOS-EFI     (bootloader, kernel, initramfs)
+  <dev>2  ${ROOT_SIZE_MB} MB   ext4    label=qos-root-a  (immutable rootfs)
+  <dev>3   rest     ext4    label=qos-state   (overlay upper/work + /var)
 EOF
 }
 
-for arg in "$@"; do
-    case "$arg" in
-        --auto) AUTO_MODE=1 ;;
+for _arg in "$@"; do
+    case "$_arg" in
+        --auto)   AUTO_MODE=1 ;;
         --help|-h) usage; exit 0 ;;
-        -*) error "Unknown option: $arg" ;;
-        *) TARGET_DEV="$arg" ;;
+        -*)       error "Unknown option: $_arg" ;;
+        *)        TARGET_DEV="$_arg" ;;
     esac
 done
 
-[ -n "$TARGET_DEV" ] || error "Target device required. Use: qos-install <device>"
+[ -n "$TARGET_DEV" ] || error "Target device required.  Run: qos-install <device>"
 [ -b "$TARGET_DEV" ] || error "Not a block device: $TARGET_DEV"
+[ "$(id -u)" = "0" ]  || error "Must run as root"
 
-# Check required tools
-for cmd in sgdisk mkfs.ext4; do
-    command -v "$cmd" >/dev/null 2>&1 || error "Required tool not found: $cmd (install gdisk/e2fsprogs)"
+# ── Tool check ──────────────────────────────────────────────────────────────
+for _cmd in sgdisk mkfs.ext4 mkfs.vfat mount umount tar blockdev; do
+    command -v "$_cmd" >/dev/null 2>&1 || error "Required tool missing: $_cmd"
 done
 
-# mkfs.vfat might be busybox applet without symlink
-if ! command -v mkfs.vfat >/dev/null 2>&1; then
-    if command -v busybox >/dev/null 2>&1 && busybox --list 2>/dev/null | grep -q mkfs.vfat; then
-        MKFS_VFAT="busybox mkfs.vfat"
+# ── Helper: partition device name ────────────────────────────────────────────
+# Handles /dev/sda → /dev/sda1  and  /dev/nvme0n1 → /dev/nvme0n1p1
+part_name() {
+    _disk="$1"; _num="$2"
+    if echo "$_disk" | grep -qE 'nvme|mmcblk|loop'; then
+        printf '%sp%s' "$_disk" "$_num"
     else
-        error "mkfs.vfat not found (install dosfstools or ensure busybox has it)"
+        printf '%s%s' "$_disk" "$_num"
     fi
-else
-    MKFS_VFAT="mkfs.vfat"
-fi
+}
 
-log "══════════════════════════════════════════════════════════"
-log "QOS Disk Installation (GPT/UEFI)"
-log "══════════════════════════════════════════════════════════"
-log "Target device: $TARGET_DEV"
-log "Auto mode: $AUTO_MODE"
-
+# ── Disk info ───────────────────────────────────────────────────────────────
 DISK_SIZE_BYTES="$(blockdev --getsize64 "$TARGET_DEV" 2>/dev/null || echo 0)"
-DISK_SIZE_MB=$((DISK_SIZE_BYTES / 1024 / 1024))
+DISK_SIZE_MB=$(( DISK_SIZE_BYTES / 1024 / 1024 ))
+[ "$DISK_SIZE_MB" -gt 0 ] || error "Cannot read disk size for $TARGET_DEV"
 
-if [ "$DISK_SIZE_MB" -eq 0 ]; then
-    error "Could not detect disk size for $TARGET_DEV"
-fi
+VAR_SIZE_MB=$(( DISK_SIZE_MB - EFI_SIZE_MB - ROOT_SIZE_MB - 4 ))
+[ "$VAR_SIZE_MB" -ge 100 ] || error "Disk too small. Need at least $(( EFI_SIZE_MB + ROOT_SIZE_MB + 104 )) MB, have ${DISK_SIZE_MB} MB"
 
-VAR_SIZE_MB=$((DISK_SIZE_MB - EFI_SIZE_MB - ROOT_SIZE_MB - 4))
+EFI_PART="$(part_name "$TARGET_DEV" 1)"
+ROOT_PART="$(part_name "$TARGET_DEV" 2)"
+STATE_PART="$(part_name "$TARGET_DEV" 3)"
 
-if [ "$VAR_SIZE_MB" -lt 100 ]; then
-    error "Disk too small. Need at least $((EFI_SIZE_MB + ROOT_SIZE_MB + 100))MB, have ${DISK_SIZE_MB}MB"
-fi
-
-log "Disk size: ${DISK_SIZE_MB}MB"
-log "Partition plan:"
-log "  EFI:  ${EFI_SIZE_MB}MB (GPT type EF00)"
-log "  Root: ${ROOT_SIZE_MB}MB (GPT type 8300)"
-log "  Var:  ${VAR_SIZE_MB}MB (remaining space)"
+log "═══════════════════════════════════════════════════════════"
+log "QOS Disk Installer"
+log "═══════════════════════════════════════════════════════════"
+log "Target  : $TARGET_DEV  (${DISK_SIZE_MB} MB)"
+log "EFI     : $EFI_PART   ${EFI_SIZE_MB} MB"
+log "Root    : $ROOT_PART  ${ROOT_SIZE_MB} MB  [label: qos-root-a]"
+log "State   : $STATE_PART  ${VAR_SIZE_MB} MB  [label: qos-state]"
 
 if [ "$AUTO_MODE" -eq 0 ]; then
-    printf "\n${YELLOW}WARNING: This will erase all data on %s${NC}\n" "$TARGET_DEV"
+    printf "\n${YELLOW}WARNING: All data on %s will be erased.${NC}\n" "$TARGET_DEV"
     printf "Continue? [y/N] "
-    read -r CONFIRM
-    case "$CONFIRM" in
-        [yY][eE][sS]|[yY]) ;;
-        *) log "Installation cancelled"; exit 0 ;;
-    esac
+    read -r _confirm
+    case "$_confirm" in [yY][eE][sS]|[yY]) ;; *) log "Cancelled"; exit 0 ;; esac
 fi
 
-log "Starting installation..."
+# ── Temp mount base ──────────────────────────────────────────────────────────
+MNTBASE="/tmp/qos-install-$$"
+mkdir -p "$MNTBASE"
 
-# Wipe existing partition table
-log "Wiping existing partition table..."
-dd if=/dev/zero of="$TARGET_DEV" bs=1M count=10 >/dev/null 2>&1
-sgdisk --zap-all "$TARGET_DEV" >/dev/null 2>&1 || true
+_cleanup() {
+    # Unmount in reverse order; ignore errors
+    for _mp in "$MNTBASE/src-efi" "$MNTBASE/src-root" \
+               "$MNTBASE/efi" "$MNTBASE/state" "$MNTBASE/root"; do
+        mountpoint -q "$_mp" 2>/dev/null && umount "$_mp" 2>/dev/null || true
+    done
+    rm -rf "$MNTBASE"
+}
+trap _cleanup EXIT INT TERM
 
-# Create GPT partition table
+# ── Step 1: Wipe & partition ──────────────────────────────────────────────────
+log "Wiping partition signatures..."
+dd if=/dev/zero of="$TARGET_DEV" bs=1M count=4 status=none
+
 log "Creating GPT partition table..."
-sgdisk -o "$TARGET_DEV" >/dev/null 2>&1 || error "Failed to create GPT partition table"
+sgdisk -Z "$TARGET_DEV" >/dev/null 2>&1 || true
+sgdisk \
+    -n 1:1M:+${EFI_SIZE_MB}M  -t 1:ef00 -c 1:QOS-EFI     \
+    -n 2:0:+${ROOT_SIZE_MB}M  -t 2:8300 -c 2:qos-root-a   \
+    -n 3:0:0                  -t 3:8300 -c 3:qos-state     \
+    "$TARGET_DEV" >/dev/null
+ok "GPT partition table created"
 
-# Create partitions using sgdisk
-log "Creating partitions..."
-sgdisk -n 1:1M:+${EFI_SIZE_MB}M -t 1:ef00 -c 1:"QOS-EFI" "$TARGET_DEV" >/dev/null 2>&1 || error "Failed to create EFI partition"
-sgdisk -n 2:0:+${ROOT_SIZE_MB}M -t 2:8300 -c 2:"QOS-Root" "$TARGET_DEV" >/dev/null 2>&1 || error "Failed to create root partition"
-sgdisk -n 3:0:0 -t 3:8300 -c 3:"QOS-Var" "$TARGET_DEV" >/dev/null 2>&1 || error "Failed to create var partition"
+# Re-read partition table
+blockdev --rereadpt "$TARGET_DEV" 2>/dev/null || true
+sleep 1
 
-log "GPT partition table created successfully"
-
-# Reload partition table
-partprobe "$TARGET_DEV" 2>/dev/null || true
-sleep 2
-
-# Verify partitions exist
-if [ ! -b "${TARGET_DEV}1" ]; then
-    error "Partition table not created, device nodes missing"
-fi
-
-log "  ${TARGET_DEV}1: EFI (${EFI_SIZE_MB}MB) - FAT32 (type EF00)"
-log "  ${TARGET_DEV}2: Root (${ROOT_SIZE_MB}MB) - ext4"
-log "  ${TARGET_DEV}3: Var (${VAR_SIZE_MB}MB) - ext4"
-
-# Format partitions
-log "Formatting EFI partition (FAT32)..."
-$MKFS_VFAT -F 32 -n "QOS-EFI" "${TARGET_DEV}1" >/dev/null 2>&1 || error "Failed to format EFI partition"
-
-log "Formatting root partition (ext4)..."
-mkfs.ext4 -F -L "QOS-Root" "${TARGET_DEV}2" >/dev/null 2>&1 || error "Failed to format root partition"
-
-log "Formatting var partition (ext4)..."
-mkfs.ext4 -F -L "QOS-Var" "${TARGET_DEV}3" >/dev/null 2>&1 || error "Failed to format var partition"
-
-log "All partitions formatted"
-
-# Mount partitions
-MNT_ROOT="$(mktemp -d)"
-MNT_EFI="$(mktemp -d)"
-MNT_VAR="$(mktemp -d)"
-
-log "Mounting partitions..."
-mount "${TARGET_DEV}2" "$MNT_ROOT" || error "Failed to mount root partition"
-mount "${TARGET_DEV}3" "$MNT_VAR" || error "Failed to mount var partition"
-
-if mount "${TARGET_DEV}1" "$MNT_EFI" 2>/dev/null; then
-    log "EFI partition mounted"
-else
-    warn "EFI partition not mountable, skipping EFI copy"
-fi
-
-# Copy root filesystem
-log "Copying root filesystem..."
-ROOTFS_SIZE="$(du -sm / 2>/dev/null | awk '{print $1}')"
-log "Root filesystem size: ${ROOTFS_SIZE}MB"
-
-for dir in /bin /sbin /lib /lib64 /usr /etc /opt /srv /home /root; do
-    if [ -d "$dir" ]; then
-        log "  Copying $dir..."
-        cp -a "$dir" "$MNT_ROOT/" 2>/dev/null || log "  Warning: partial copy of $dir"
-    fi
+# Wait for partition devices to appear
+_waited=0
+while [ ! -b "$EFI_PART" ] || [ ! -b "$ROOT_PART" ] || [ ! -b "$STATE_PART" ]; do
+    sleep 1
+    _waited=$(( _waited + 1 ))
+    [ "$_waited" -lt 10 ] || error "Partition devices did not appear: $EFI_PART $ROOT_PART $STATE_PART"
 done
 
-log "  Copying /var (excluding overlay)..."
-mkdir -p "$MNT_ROOT/var"
-for vdir in /var/lib /var/log /var/cache /var/spool /var/run; do
-    if [ -d "$vdir" ]; then
-        cp -a "$vdir" "$MNT_ROOT/var/" 2>/dev/null || true
-    fi
-done
+# ── Step 2: Format ───────────────────────────────────────────────────────────
+log "Formatting partitions..."
+mkfs.vfat -F32 -n QOS-EFI    "$EFI_PART"   >/dev/null && ok "  EFI:   FAT32"
+mkfs.ext4 -F   -L qos-root-a "$ROOT_PART"  >/dev/null && ok "  Root:  ext4  (label=qos-root-a)"
+mkfs.ext4 -F   -L qos-state  "$STATE_PART" >/dev/null && ok "  State: ext4  (label=qos-state)"
 
-mkdir -p "$MNT_ROOT/proc" "$MNT_ROOT/sys" "$MNT_ROOT/dev" "$MNT_ROOT/tmp"
-mkdir -p "$MNT_ROOT/run" "$MNT_ROOT/mnt" "$MNT_ROOT/media" "$MNT_ROOT/lost+found"
-chmod 1777 "$MNT_ROOT/tmp" 2>/dev/null || true
+# ── Step 3: Mount target partitions ──────────────────────────────────────────
+mkdir -p "$MNTBASE/root" "$MNTBASE/efi" "$MNTBASE/state"
+mount "$ROOT_PART"  "$MNTBASE/root"
+mount "$EFI_PART"   "$MNTBASE/efi"
+mount "$STATE_PART" "$MNTBASE/state"
 
-log "Root filesystem copied"
+# ── Step 4: Copy rootfs ───────────────────────────────────────────────────────
+#
+# Preferred: mount the source qos-root-a partition directly (cleanest copy,
+# avoids copying overlay artifacts from the running system).
+# Fallback: tar the running / (with exclusions).
+#
+log "Copying rootfs..."
+_src_root_dev="$(findfs LABEL=qos-root-a 2>/dev/null || true)"
 
-# Setup var partition
-log "Setting up var partition..."
-mkdir -p "$MNT_VAR/lib/qos" "$MNT_VAR/log" "$MNT_VAR/cache"
-mkdir -p "$MNT_VAR/overlay/upper" "$MNT_VAR/overlay/work"
-
-cp -a /var/lib/dropbear "$MNT_VAR/lib/" 2>/dev/null || true
-cp -a /var/log/* "$MNT_VAR/log/" 2>/dev/null || true
-
-log "Var partition setup complete"
-
-# Setup EFI partition (using mtools to avoid mounting issues)
-log "Setting up EFI partition..."
-
-# Check for Limine source to copy bootloader
-limine_src="$root/build/cache/limine/limine"
-# Fallback for installed environment where we might not have cache
-if [[ ! -d "$limine_src" ]]; then
-    # Try to find BOOTX64.EFI on the current boot disk's EFI partition
-    current_efi_dev=$(df /boot/efi 2>/dev/null | tail -1 | awk '{print $1}')
-    if [ -z "$current_efi_dev" ]; then
-        # Fallback: try to find it
-        current_efi_dev="/dev/vda1"
-    fi
-    
-    log "Extracting BOOTX64.EFI from current system..."
-    mkdir -p /tmp/current-efi
-    mount -o ro "$current_efi_dev" /tmp/current-efi 2>/dev/null || true
-    if [ -f /tmp/current-efi/EFI/BOOT/BOOTX64.EFI ]; then
-        cp /tmp/current-efi/EFI/BOOT/BOOTX64.EFI /tmp/BOOTX64.EFI
-        umount /tmp/current-efi 2>/dev/null
-        BOOTX64_SRC="/tmp/BOOTX64.EFI"
-    else
-        warn "Could not find BOOTX64.EFI on current system"
-        BOOTX64_SRC=""
-    fi
+if [ -n "$_src_root_dev" ] && [ "$_src_root_dev" != "$ROOT_PART" ]; then
+    mkdir -p "$MNTBASE/src-root"
+    mount -o ro "$_src_root_dev" "$MNTBASE/src-root"
+    log "  Source: $MNTBASE/src-root (mounted $ 		_src_root_dev)"
+    tar -C "$MNTBASE/src-root" \
+        --exclude=./proc --exclude=./sys --exclude=./dev \
+        --exclude=./run  --exclude=./tmp \
+        -cf - . | tar -C "$MNTBASE/root" -xf -
+    umount "$MNTBASE/src-root"
+    rmdir  "$MNTBASE/src-root"
 else
-    BOOTX64_SRC="$limine_src/BOOTX64.EFI"
+    log "  Source: running system (live copy)"
+    tar -C / \
+        --exclude=./proc --exclude=./sys  --exclude=./dev  \
+        --exclude=./run  --exclude=./tmp  --exclude=./cdrom \
+        --exclude=./mnt  --exclude=./media \
+        -cf - . | tar -C "$MNTBASE/root" -xf -
 fi
+ok "Rootfs copied"
 
-# Create directories on EFI partition using mcopy/mmd
-# -i specifies the device
-mmd -i "${TARGET_DEV}1" ::/EFI 2>/dev/null || true
-mmd -i "${TARGET_DEV}1" ::/EFI/BOOT 2>/dev/null || true
+# ── Step 5: Create essential directories ─────────────────────────────────────
+for _d in proc sys dev run tmp var boot/efi; do
+    mkdir -p "$MNTBASE/root/$_d"
+done
+chmod 1777 "$MNTBASE/root/tmp"
 
-# Copy Limine Bootloader
-if [ -n "$BOOTX64_SRC" ] && [ -f "$BOOTX64_SRC" ]; then
-    log "  Copying BOOTX64.EFI..."
-    mcopy -i "${TARGET_DEV}1" "$BOOTX64_SRC" ::/EFI/BOOT/BOOTX64.EFI 2>/dev/null || error "Failed to copy BOOTX64.EFI"
-fi
+# /var is owned by the state partition; remove any content from root
+rm -rf "$MNTBASE/root/var"
+mkdir -p "$MNTBASE/root/var"
 
-# Copy Kernel
-if [ -f /boot/vmlinuz ]; then
-    log "  Copying vmlinuz..."
-    mcopy -i "${TARGET_DEV}1" /boot/vmlinuz ::/vmlinuz 2>/dev/null || warn "Failed to copy vmlinuz"
-    # Also copy to boot dir for safety
-    mcopy -i "${TARGET_DEV}1" /boot/vmlinuz ::/boot/vmlinuz 2>/dev/null || true
-fi
+# ── Step 6: Write fstab ───────────────────────────────────────────────────────
+log "Writing /etc/fstab..."
+mkdir -p "$MNTBASE/root/etc"
+cat > "$MNTBASE/root/etc/fstab" <<'FSTAB'
+# QOS fstab — generated by qos-install
+LABEL=qos-root-a  /         ext4  ro,relatime              0 1
+LABEL=QOS-EFI     /boot/efi vfat  ro,relatime              0 2
+LABEL=qos-state   /var      ext4  rw,relatime              0 2
+tmpfs             /run      tmpfs rw,nosuid,nodev,mode=0755 0 0
+tmpfs             /tmp      tmpfs rw,nosuid,nodev,mode=1777 0 0
+FSTAB
+ok "fstab written"
 
-# Copy Initramfs
-if [ -f /boot/initramfs.img ]; then
-    log "  Copying initramfs.img..."
-    mcopy -i "${TARGET_DEV}1" /boot/initramfs.img ::/initramfs.img 2>/dev/null || warn "Failed to copy initramfs.img"
-    mcopy -i "${TARGET_DEV}1" /boot/initramfs.img ::/boot/initramfs.img 2>/dev/null || true
-fi
+# ── Step 7: Setup state partition ────────────────────────────────────────────
+log "Initialising state partition..."
+mkdir -p \
+    "$MNTBASE/state/overlay/upper" \
+    "$MNTBASE/state/overlay/work"  \
+    "$MNTBASE/state/var/log"       \
+    "$MNTBASE/state/var/lib"       \
+    "$MNTBASE/state/var/lib/qos"   \
+    "$MNTBASE/state/var/cache"     \
+    "$MNTBASE/state/var/tmp"
 
-# Copy Limine Config
-if [ -f /boot/limine.conf ]; then
-    log "  Copying limine.conf..."
-    mcopy -i "${TARGET_DEV}1" /boot/limine.conf ::/limine.conf 2>/dev/null || warn "Failed to copy limine.conf"
-    mcopy -i "${TARGET_DEV}1" /boot/limine.conf ::/EFI/BOOT/limine.conf 2>/dev/null || true
-fi
-
-log "EFI partition setup complete"
-
-# Update fstab
-log "Updating fstab..."
-cat > "$MNT_ROOT/etc/fstab" <<EOF
-# QOS filesystem table (GPT installation)
-LABEL=QOS-Root  /           ext4  ro,relatime  0 1
-LABEL=QOS-EFI   /boot/efi   vfat  rw,relatime  0 2
-LABEL=QOS-Var   /var        ext4  rw,relatime  0 2
-tmpfs           /run        tmpfs rw,nosuid,nodev,mode=0755  0 0
-tmpfs           /tmp        tmpfs rw,nosuid,nodev,mode=1777  0 0
-EOF
-
-log "fstab updated"
-
-# Create installation marker
-cat > "$MNT_VAR/lib/qos/installed.conf" <<EOF
-# QOS installation metadata
-INSTALL_DATE="$(date -Iseconds)"
+# Installation marker
+cat > "$MNTBASE/state/var/lib/qos/installed.conf" <<EOF
+INSTALL_DATE="$(date -Iseconds 2>/dev/null || date)"
 TARGET_DEV="$TARGET_DEV"
+EFI_PART="$EFI_PART"
+ROOT_PART="$ROOT_PART"
+STATE_PART="$STATE_PART"
 DISK_SIZE_MB="$DISK_SIZE_MB"
-EFI_SIZE_MB="$EFI_SIZE_MB"
-ROOT_SIZE_MB="$ROOT_SIZE_MB"
-PARTITION_TYPE=GPT
 INSTALLED_BY="qos-install"
 EOF
+ok "State partition initialised"
 
-log "Installation marker created"
+# ── Step 8: Populate EFI partition ───────────────────────────────────────────
+log "Populating EFI partition..."
+mkdir -p "$MNTBASE/efi/EFI/BOOT"
 
-# Cleanup mounts
-log "Unmounting partitions..."
-umount "$MNT_EFI" 2>/dev/null || warn "Failed to unmount EFI"
-umount "$MNT_VAR" || warn "Failed to unmount var"
-umount "$MNT_ROOT" || warn "Failed to unmount root"
+# Find boot files — check multiple locations in priority order:
+#  1. Live CD cdrom mount at /cdrom
+#  2. Source disk EFI partition (parent of qos-root-a, partition 1)
+#  3. /boot/efi if already mounted on the running system
+_boot_src=""
 
-rm -rf "$MNT_ROOT" "$MNT_EFI" "$MNT_VAR"
+_try_cdrom_mount() {
+    local _dev="$1"
+    mkdir -p "$MNTBASE/cdrom-tmp"
+    if mount -t iso9660 -o ro "$_dev" "$MNTBASE/cdrom-tmp" 2>/dev/null; then
+        if [ -d "$MNTBASE/cdrom-tmp/EFI/BOOT" ]; then
+            _boot_src="$MNTBASE/cdrom-tmp"
+            return 0
+        fi
+        umount "$MNTBASE/cdrom-tmp"
+    fi
+    return 1
+}
 
-# Verify installation
-log "Verifying installation..."
-if sgdisk -p "$TARGET_DEV" >/dev/null 2>&1; then
-    log "GPT partition table verified"
-    sgdisk -p "$TARGET_DEV" 2>/dev/null | grep -E "Number|EFI|Root|Var" | while read -r line; do
-        log "  $line"
-    done
-else
-    warn "Could not verify GPT partition table"
+# 1a. Already-mounted cdrom inside the live system
+if [ -d /cdrom/EFI/BOOT ] && [ -f /cdrom/EFI/BOOT/BOOTX64.EFI ]; then
+    _boot_src="/cdrom"
+    log "  Boot files: /cdrom (live CD)"
+# 1b. Try to mount /dev/sr0
+elif [ -b /dev/sr0 ]; then
+    _try_cdrom_mount /dev/sr0 && log "  Boot files: /dev/sr0 (CDROM)" || true
 fi
 
-log "══════════════════════════════════════════════════════════"
-log "✅ Installation Complete!"
-log "══════════════════════════════════════════════════════════"
+# 2. Source disk EFI partition
+if [ -z "$_boot_src" ] && [ -n "$_src_root_dev" ]; then
+    _src_disk="$(echo "$_src_root_dev" | sed 's/p\?[0-9]*$//')"
+    _src_efi="$(part_name "$_src_disk" 1)"
+    if [ -b "$_src_efi" ]; then
+        mkdir -p "$MNTBASE/src-efi"
+        if mount -o ro "$_src_efi" "$MNTBASE/src-efi" 2>/dev/null; then
+            if [ -d "$MNTBASE/src-efi/EFI/BOOT" ]; then
+                _boot_src="$MNTBASE/src-efi"
+                log "  Boot files: $MNTBASE/src-efi (source EFI partition)"
+            else
+                umount "$MNTBASE/src-efi"
+            fi
+        fi
+    fi
+fi
+
+# 3. /boot/efi on the running system
+if [ -z "$_boot_src" ] && [ -d /boot/efi/EFI/BOOT ]; then
+    _boot_src="/boot/efi"
+    log "  Boot files: /boot/efi (running system)"
+fi
+
+if [ -n "$_boot_src" ]; then
+    # EFI binary
+    [ -f "$_boot_src/EFI/BOOT/BOOTX64.EFI" ] && \
+        cp "$_boot_src/EFI/BOOT/BOOTX64.EFI" "$MNTBASE/efi/EFI/BOOT/" && \
+        ok "  Copied BOOTX64.EFI"
+
+    # Kernel
+    for _k in vmlinuz boot/vmlinuz; do
+        if [ -f "$_boot_src/$_k" ]; then
+            cp "$_boot_src/$_k" "$MNTBASE/efi/vmlinuz"
+            ok "  Copied vmlinuz"
+            break
+        fi
+    done
+
+    # Initramfs
+    for _r in initramfs.img boot/initramfs.img; do
+        if [ -f "$_boot_src/$_r" ]; then
+            cp "$_boot_src/$_r" "$MNTBASE/efi/initramfs.img"
+            ok "  Copied initramfs.img"
+            break
+        fi
+    done
+else
+    warn "Could not locate boot files (BOOTX64.EFI / vmlinuz / initramfs.img)."
+    warn "EFI partition may be incomplete — system might not boot."
+fi
+
+# ── Step 9: Write limine.conf for disk boot ───────────────────────────────────
+# NOTE: no 'livecd' parameter here — this is the installed-disk boot config.
+cat > "$MNTBASE/efi/limine.conf" <<'LIMINEOF'
+timeout: 0
+verbose: yes
+default_entry: 1
+
+/QOS
+    protocol: linux
+    kernel_path: boot():/vmlinuz
+    module_path: boot():/initramfs.img
+    cmdline: root=LABEL=qos-root-a rootfstype=ext4 rootwait ro console=ttyS0,115200n8 earlycon=uart,io,0x3f8,115200n8 loglevel=7 ignore_loglevel net.ifnames=0 biosdevname=0
+LIMINEOF
+
+# Limine also checks EFI/BOOT/limine.conf
+cp "$MNTBASE/efi/limine.conf" "$MNTBASE/efi/EFI/BOOT/limine.conf"
+
+# UEFI Shell fallback autoboot
+printf '\EFI\BOOT\BOOTX64.EFI\r\n' > "$MNTBASE/efi/startup.nsh"
+ok "EFI partition configured"
+
+# ── Step 10: Sync & finish ────────────────────────────────────────────────────
+log "Syncing..."
+sync
+
+log "═══════════════════════════════════════════════════════════"
+ok "Installation complete!"
+log "═══════════════════════════════════════════════════════════"
 log ""
-log "Disk layout (GPT):"
-log "  ${TARGET_DEV}1  EFI (${EFI_SIZE_MB}MB)  - Bootloader (type EF00)"
-log "  ${TARGET_DEV}2  Root (${ROOT_SIZE_MB}MB) - System (type 8300)"
-log "  ${TARGET_DEV}3  Var (${VAR_SIZE_MB}MB)   - Data (type 8300)"
+log "Disk layout:"
+log "  $EFI_PART   EFI    ${EFI_SIZE_MB} MB"
+log "  $ROOT_PART  Root  ${ROOT_SIZE_MB} MB  [label: qos-root-a]"
+log "  $STATE_PART State ${VAR_SIZE_MB} MB  [label: qos-state]"
 log ""
 log "Next steps:"
-log "  1. Shutdown: poweroff"
-log "  2. Boot from installed disk"
-log "  3. System will use new GPT partition layout"
+log "  1. poweroff"
+log "  2. make qemu2      (boot from installed disk)"
 log ""
-log "Installation log: $INSTALL_LOG"
+log "Log: $INSTALL_LOG"

@@ -66,19 +66,24 @@ boot-limine: kernel initramfs
 	@LIMINE_STAGE_DIR=$(ROOT)/build/boot KERNEL_BUILD_DIR=$(ROOT)/build/kernel INITRAMFS_BUILD_DIR=$(ROOT)/build/initramfs bash scripts/install-limine.sh
 
 iso: boot-limine
-	@ISO_OUTPUT_DIR=$(ROOT)/dist BOOT_STAGE_DIR=$(ROOT)/build/boot bash scripts/build-iso.sh
+	@ISO_OUTPUT_DIR=$(ROOT)/dist BOOT_STAGE_DIR=$(ROOT)/build/boot ROOTFS_DIR=$(ROOT)/build/rootfs bash scripts/build-iso.sh
 
 image:
 	@IMAGE_BUILD_DIR=$(ROOT)/build/image IMAGE_OUTPUT_DIR=$(ROOT)/dist ROOTFS_DIR=$(ROOT)/build/rootfs BOOT_STAGE_DIR=$(ROOT)/build/boot bash scripts/assemble-image.sh
 
 boot:
-	@echo "Booting raw disk image (live ISO support in progress)..."
+	@echo "Booting raw disk image in QEMU (use 'make qemu' for ISO boot)..."
 	@QEMU_BOOT_DISK=primary QEMU_MEMORY=$(QEMU_MEMORY) QEMU_CPUS=$(QEMU_CPUS) QEMU_NET_MODE=$(QEMU_NET_MODE) QEMU_BRIDGE_IFACE=$(QEMU_BRIDGE_IFACE) QEMU_HOSTFWD_PORT=$(QEMU_HOSTFWD_PORT) scripts/boot-image.sh --qemu $(QEMU_IMAGE)
 
 qemu:
-	@QEMU_BOOT_DISK=primary QEMU_MEMORY=$(QEMU_MEMORY) QEMU_CPUS=$(QEMU_CPUS) QEMU_NET_MODE=$(QEMU_NET_MODE) QEMU_BRIDGE_IFACE=$(QEMU_BRIDGE_IFACE) QEMU_HOSTFWD_PORT=$(QEMU_HOSTFWD_PORT) scripts/boot-image.sh --qemu $(QEMU_IMAGE)
+	@## Boot live ISO — extra disk (/dev/vda inside VM) is the install target.
+	@## Workflow: make qemu → qos-install --auto /dev/vda → poweroff → make qemu2
+	@test -f dist/qos-x86_64.iso || { echo "ERROR: dist/qos-x86_64.iso not found. Run: make iso"; exit 1; }
+	@QEMU_MEMORY=$(QEMU_MEMORY) QEMU_CPUS=$(QEMU_CPUS) QEMU_NET_MODE=$(QEMU_NET_MODE) QEMU_BRIDGE_IFACE=$(QEMU_BRIDGE_IFACE) QEMU_HOSTFWD_PORT=$(QEMU_HOSTFWD_PORT) scripts/boot-image.sh --qemu-iso $(ROOT)/dist/qos-x86_64.iso
 
 qemu2:
+	@## Boot from the installed disk (build/qemu/extra-disk.raw).
+	@## Run 'make qemu' and 'qos-install' first.
 	@QEMU_BOOT_DISK=installed QEMU_MEMORY=$(QEMU_MEMORY) QEMU_CPUS=$(QEMU_CPUS) QEMU_NET_MODE=$(QEMU_NET_MODE) QEMU_BRIDGE_IFACE=$(QEMU_BRIDGE_IFACE) QEMU_HOSTFWD_PORT=$(QEMU_HOSTFWD_PORT) scripts/boot-image.sh --qemu $(QEMU_IMAGE)
 
 smoke:

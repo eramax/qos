@@ -166,20 +166,24 @@ qemu_system_args=(
 
 # Boot from ISO or raw disk based on boot_disk setting
 if [[ "$boot_disk" == "installed" ]]; then
-  # Boot from installed disk (secondary disk)
+  # Boot from installed disk ONLY - unplug the small source image.
+  # QEMU renames the first attached drive to /dev/vda automatically.
   qemu_system_args=(
-    -drive if=none,file="$image_path",id=bootdisk,format=raw
-    -device virtio-blk-pci,drive=bootdisk,bootindex=1
     "${qemu_system_args[@]}"
     -drive if=none,file="$extra_disk",format=raw,id=extradisk
     -device virtio-blk-pci,drive=extradisk,bootindex=0
   )
 elif [[ -f "${QEMU_ISO:-}" ]]; then
-  # Boot from ISO (live CD)
+  # Boot from ISO (live CD) via virtio-scsi.
+  # Using virtio-scsi instead of IDE/AHCI because the AHCI driver is built
+  # as a module (=m) in this kernel, whereas CONFIG_SCSI_VIRTIO=y and
+  # CONFIG_BLK_DEV_SR=y are built-in.  The CDROM appears as /dev/sr0 in
+  # the guest.  The extra disk is the install target (/dev/vda).
   qemu_system_args=(
-    -boot d
     "${qemu_system_args[@]}"
-    -drive file="${QEMU_ISO}",media=cdrom
+    -device virtio-scsi-pci,id=scsi0
+    -drive if=none,file="${QEMU_ISO}",media=cdrom,id=iso0
+    -device scsi-cd,bus=scsi0.0,drive=iso0,bootindex=0
     -drive if=none,file="$extra_disk",format=raw,id=extradisk
     -device virtio-blk-pci,drive=extradisk,bootindex=1
   )
