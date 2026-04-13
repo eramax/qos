@@ -101,17 +101,38 @@ if [ "$AUTO_MODE" -eq 0 ]; then
     case "$_confirm" in [yY][eE][sS]|[yY]) ;; *) log "Cancelled"; exit 0 ;; esac
 fi
 
+# ── Unmount any existing partitions on target ────────────────────────────────
+log "Unmounting existing partitions on $TARGET_DEV..."
+for _mp in $(mount | grep "^${TARGET_DEV}" | awk '{print $3}' | sort -r); do
+    umount "$_mp" 2>/dev/null || umount -l "$_mp" 2>/dev/null || true
+done
+# Also try by partition name
+for _n in 1 2 3 4 5; do
+    _pdev="$(part_name "$TARGET_DEV" "$_n")"
+    [ -b "$_pdev" ] || continue
+    for _mp in $(mount | grep "^${_pdev}" | awk '{print $3}'); do
+        umount "$_mp" 2>/dev/null || umount -l "$_mp" 2>/dev/null || true
+    done
+done
+
 # ── Temp mount base ──────────────────────────────────────────────────────────
 MNTBASE="/tmp/qos-install-$$"
+rm -rf "$MNTBASE"
 mkdir -p "$MNTBASE"
 
 _cleanup() {
-    # Unmount in reverse order; ignore errors
-    for _mp in "$MNTBASE/src-efi" "$MNTBASE/src-root" \
+    # Unmount in reverse order.  Use regular umount first (flushes data);
+    # fall back to lazy only if busy.
+    for _mp in "$MNTBASE/src-efi" "$MNTBASE/src-root" "$MNTBASE/cdrom-tmp" \
                "$MNTBASE/efi" "$MNTBASE/state" "$MNTBASE/root"; do
-        mountpoint -q "$_mp" 2>/dev/null && umount "$_mp" 2>/dev/null || true
+        if mountpoint -q "$_mp" 2>/dev/null; then
+            sync 2>/dev/null || true
+            umount "$_mp" 2>/dev/null || umount -l "$_mp" 2>/dev/null || true
+        fi
     done
-    rm -rf "$MNTBASE"
+    # Best-effort dir cleanup; don't fail if still busy.
+    rmdir "$MNTBASE"/* 2>/dev/null || true
+    rmdir "$MNTBASE" 2>/dev/null || true
 }
 trap _cleanup EXIT INT TERM
 
@@ -231,83 +252,37 @@ ok "State partition initialised"
 log "Populating EFI partition..."
 mkdir -p "$MNTBASE/efi/EFI/BOOT"
 
-# Find boot files — check multiple locations in priority order:
-#  1. Live CD cdrom mount at /cdrom
-#  2. Source disk EFI partition (parent of qos-root-a, partition 1)
-#  3. /boot/efi if already mounted on the running system
-_boot_src=""
+# Boot file sources (in priority order):
+#  0. Embedded payload at /var/lib/qos/boot/ (placed there by build-iso.sh)
+#  1. Source disk EFI partition (if booting from another disk)
+#  2. /boot/efi on the running system
+_payload="/var/lib/qos/boot"
 
-_try_cdrom_mount() {
-    local _dev="$1"
-    mkdir -p "$MNTBASE/cdrom-tmp"
-    if mount -t iso9660 -o ro "$_dev" "$MNTBASE/cdrom-tmp" 2>/dev/null; then
-        if [ -d "$MNTBASE/cdrom-tmp/EFI/BOOT" ]; then
-            _boot_src="$MNTBASE/cdrom-tmp"
-            return 0
-        fi
-        umount "$MNTBASE/cdrom-tmp"
-    fi
-    return 1
-}
-
-# 1a. Already-mounted cdrom inside the live system
-if [ -d /cdrom/EFI/BOOT ] && [ -f /cdrom/EFI/BOOT/BOOTX64.EFI ]; then
-    _boot_src="/cdrom"
-    log "  Boot files: /cdrom (live CD)"
-# 1b. Try to mount /dev/sr0
-elif [ -b /dev/sr0 ]; then
-    _try_cdrom_mount /dev/sr0 && log "  Boot files: /dev/sr0 (CDROM)" || true
-fi
-
-# 2. Source disk EFI partition
-if [ -z "$_boot_src" ] && [ -n "$_src_root_dev" ]; then
+if [ -f "$_payload/BOOTX64.EFI" ] && [ -f "$_payload/vmlinuz" ] && [ -f "$_payload/initramfs.img" ]; then
+    log "  Boot files: $_payload (embedded payload)"
+    cp "$_payload/BOOTX64.EFI"  "$MNTBASE/efi/EFI/BOOT/"  && ok "  Copied BOOTX64.EFI"
+    cp "$_payload/vmlinuz"       "$MNTBASE/efi/vmlinuz"    && ok "  Copied vmlinuz"
+    cp "$_payload/initramfs.img" "$MNTBASE/efi/initramfs.img" && ok "  Copied initramfs.img"
+elif [ -n "$_src_root_dev" ] && [ "$_src_root_dev" != "$ROOT_PART" ]; then
     _src_disk="$(echo "$_src_root_dev" | sed 's/p\?[0-9]*$//')"
     _src_efi="$(part_name "$_src_disk" 1)"
     if [ -b "$_src_efi" ]; then
         mkdir -p "$MNTBASE/src-efi"
-        if mount -o ro "$_src_efi" "$MNTBASE/src-efi" 2>/dev/null; then
-            if [ -d "$MNTBASE/src-efi/EFI/BOOT" ]; then
-                _boot_src="$MNTBASE/src-efi"
-                log "  Boot files: $MNTBASE/src-efi (source EFI partition)"
-            else
-                umount "$MNTBASE/src-efi"
-            fi
-        fi
+        mount -o ro "$_src_efi" "$MNTBASE/src-efi"
+        log "  Boot files: $_src_efi (source EFI partition)"
+        cp "$MNTBASE/src-efi/EFI/BOOT/BOOTX64.EFI" "$MNTBASE/efi/EFI/BOOT/" && ok "  Copied BOOTX64.EFI"
+        cp "$MNTBASE/src-efi/vmlinuz"               "$MNTBASE/efi/vmlinuz"   && ok "  Copied vmlinuz"
+        cp "$MNTBASE/src-efi/initramfs.img"          "$MNTBASE/efi/initramfs.img" && ok "  Copied initramfs.img"
+        umount "$MNTBASE/src-efi"
     fi
-fi
-
-# 3. /boot/efi on the running system
-if [ -z "$_boot_src" ] && [ -d /boot/efi/EFI/BOOT ]; then
-    _boot_src="/boot/efi"
+elif [ -d /boot/efi/EFI/BOOT ]; then
     log "  Boot files: /boot/efi (running system)"
-fi
-
-if [ -n "$_boot_src" ]; then
-    # EFI binary
-    [ -f "$_boot_src/EFI/BOOT/BOOTX64.EFI" ] && \
-        cp "$_boot_src/EFI/BOOT/BOOTX64.EFI" "$MNTBASE/efi/EFI/BOOT/" && \
-        ok "  Copied BOOTX64.EFI"
-
-    # Kernel
-    for _k in vmlinuz boot/vmlinuz; do
-        if [ -f "$_boot_src/$_k" ]; then
-            cp "$_boot_src/$_k" "$MNTBASE/efi/vmlinuz"
-            ok "  Copied vmlinuz"
-            break
-        fi
-    done
-
-    # Initramfs
-    for _r in initramfs.img boot/initramfs.img; do
-        if [ -f "$_boot_src/$_r" ]; then
-            cp "$_boot_src/$_r" "$MNTBASE/efi/initramfs.img"
-            ok "  Copied initramfs.img"
-            break
-        fi
-    done
+    cp /boot/efi/EFI/BOOT/BOOTX64.EFI "$MNTBASE/efi/EFI/BOOT/" && ok "  Copied BOOTX64.EFI"
+    cp /boot/efi/vmlinuz              "$MNTBASE/efi/vmlinuz"    && ok "  Copied vmlinuz"
+    cp /boot/efi/initramfs.img        "$MNTBASE/efi/initramfs.img" && ok "  Copied initramfs.img"
 else
     warn "Could not locate boot files (BOOTX64.EFI / vmlinuz / initramfs.img)."
-    warn "EFI partition may be incomplete — system might not boot."
+    warn "EFI partition will be incomplete — system will NOT boot."
 fi
 
 # ── Step 9: Write limine.conf for disk boot ───────────────────────────────────
@@ -331,9 +306,13 @@ cp "$MNTBASE/efi/limine.conf" "$MNTBASE/efi/EFI/BOOT/limine.conf"
 printf '\EFI\BOOT\BOOTX64.EFI\r\n' > "$MNTBASE/efi/startup.nsh"
 ok "EFI partition configured"
 
-# ── Step 10: Sync & finish ────────────────────────────────────────────────────
-log "Syncing..."
+# ── Step 10: Sync & unmount ────────────────────────────────────────────────────
+log "Syncing and unmounting..."
 sync
+# Explicitly unmount BEFORE reporting success so data is committed.
+for _mp in "$MNTBASE/efi" "$MNTBASE/state" "$MNTBASE/root"; do
+    mountpoint -q "$_mp" 2>/dev/null && { sync; umount "$_mp"; } || true
+done
 
 log "═══════════════════════════════════════════════════════════"
 ok "Installation complete!"

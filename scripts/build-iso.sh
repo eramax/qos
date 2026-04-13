@@ -73,6 +73,30 @@ echo "  Copying rootfs into live initramfs..."
 mkdir -p "$live_stage/rootfs"
 cp -a "$rootfs/." "$live_stage/rootfs/"
 
+# ── Embed boot files for qos-install ─────────────────────────────────────────
+# The installer needs BOOTX64.EFI, vmlinuz, and the DISK-boot initramfs.img
+# (not the live one).  Place them in /var/lib/qos/boot/ so the installer can
+# find them without needing to mount the CDROM or locate a source disk.
+echo "  Embedding boot files for installer..."
+boot_payload="$live_stage/rootfs/var/lib/qos/boot"
+mkdir -p "$boot_payload"
+cp "$limine_efi"                    "$boot_payload/BOOTX64.EFI"
+cp "$boot_dir/vmlinuz"              "$boot_payload/vmlinuz"
+cp "$boot_dir/initramfs.img"        "$boot_payload/initramfs.img"
+# Disk-boot limine.conf (no livecd flag; root=LABEL=qos-root-a)
+cat > "$boot_payload/limine.conf" <<'DISKLIMINE'
+timeout: 0
+verbose: yes
+default_entry: 1
+
+/QOS
+    protocol: linux
+    kernel_path: boot():/vmlinuz
+    module_path: boot():/initramfs.img
+    cmdline: root=LABEL=qos-root-a rootfstype=ext4 rootwait ro console=ttyS0,115200n8 earlycon=uart,io,0x3f8,115200n8 loglevel=7 ignore_loglevel net.ifnames=0 biosdevname=0
+DISKLIMINE
+echo "  Boot payload: $(du -sh "$boot_payload" | awk '{print $1}')"
+
 cat > "$live_stage/init" <<'LIVE_INIT'
 #!/bin/sh
 # Live CD init — PID 1 inside the live initramfs.
