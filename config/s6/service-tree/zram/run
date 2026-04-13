@@ -39,7 +39,16 @@ if [ "$(cat "/sys/class/block/$zram_name/disksize" 2>/dev/null || echo 0)" = 0 ]
   echo "$size_bytes" > "/sys/class/block/$zram_name/disksize"
 fi
 
-/bin/busybox mkswap "$zram_dev"
-/bin/busybox swapon "$zram_dev"
+_retry=0
+while [ "$_retry" -lt 5 ]; do
+    if /bin/busybox mkswap "$zram_dev" 2>/dev/null; then
+        break
+    fi
+    _retry=$(( _retry + 1 ))
+    sleep 1
+done
+[ "$_retry" -ge 5 ] && { echo "zram: mkswap failed after 5 retries" >&2; exit 1; }
+
+/bin/busybox swapon "$zram_dev" 2>/dev/null || { echo "zram: swapon failed" >&2; exit 1; }
 
 exec sleep 2147483647
