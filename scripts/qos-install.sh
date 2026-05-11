@@ -1,6 +1,6 @@
 #!/bin/sh
 # qos-install - Install QOS from live environment to target disk
-# Usage: qos-install [--auto] <device>
+# Usage: qos-install [--auto] [device]
 #
 # Requires root. Partitions the target disk with GPT, formats with
 # FAT32 (EFI) + ext4 (root, state), and copies the running system.
@@ -22,6 +22,7 @@ fi
 
 AUTO_MODE=0
 TARGET_DEV=""
+TEST_MODE="${QOS_INSTALL_TEST_MODE:-0}"
 
 log()   { printf "${BLUE}[INSTALL]${NC} %s\n" "$*"; printf "[%s] %s\n" "$(date -Iseconds 2>/dev/null || date)" "$*" >> "$INSTALL_LOG" 2>/dev/null || true; }
 error() { printf "${RED}[ERROR]${NC} %s\n" "$*" >&2; printf "[%s] ERROR: %s\n" "$(date -Iseconds 2>/dev/null || date)" "$*" >> "$INSTALL_LOG" 2>/dev/null || true; exit 1; }
@@ -30,13 +31,16 @@ ok()    { printf "${GREEN}[OK]${NC} %s\n" "$*"; }
 
 usage() {
     cat <<EOF
-Usage: qos-install [--auto] <device>
+Usage: qos-install [--auto] [device]
 
 Install QOS to a disk using GPT / UEFI layout.
 
 Options:
   --auto    Non-interactive (no confirmation prompt)
   <device>  Target block device (e.g. /dev/vda, /dev/sda)
+
+If <device> is omitted, qos-install lists available disks and prompts you
+to choose one by number.
 
 Partition layout created:
   <dev>1   ${EFI_SIZE_MB} MB   FAT32   label=QOS-EFI     (bootloader, kernel, initramfs)
@@ -54,15 +58,6 @@ for _arg in "$@"; do
     esac
 done
 
-[ -n "$TARGET_DEV" ] || error "Target device required.  Run: qos-install <device>"
-[ -b "$TARGET_DEV" ] || error "Not a block device: $TARGET_DEV"
-[ "$(id -u)" = "0" ]  || error "Must run as root"
-
-# ── Tool check ──────────────────────────────────────────────────────────────
-for _cmd in sgdisk mkfs.ext4 mkfs.vfat mount umount tar blockdev; do
-    command -v "$_cmd" >/dev/null 2>&1 || error "Required tool missing: $_cmd"
-done
-
 # ── Helper: partition device name ────────────────────────────────────────────
 # Handles /dev/sda → /dev/sda1  and  /dev/nvme0n1 → /dev/nvme0n1p1
 part_name() {
@@ -73,6 +68,76 @@ part_name() {
         printf '%s%s' "$_disk" "$_num"
     fi
 }
+
+list_target_disks() {
+    if [ "$TEST_MODE" = "1" ] && [ -n "${QOS_INSTALL_TEST_DISKS:-}" ]; then
+        printf '%s\n' "$QOS_INSTALL_TEST_DISKS"
+        return 0
+    fi
+
+    command -v lsblk >/dev/null 2>&1 || error "Required tool missing: lsblk"
+    lsblk -dn -o PATH,TYPE,SIZE,MODEL 2>/dev/null | awk '
+        $2 == "disk" {
+            path=$1
+            size=$3
+            $1=""; $2=""; $3=""
+            sub(/^[[:space:]]+/, "", $0)
+            model=$0
+            if (model == "") model="-"
+            printf "%s|%s|%s\n", path, size, model
+        }
+    '
+}
+
+pick_target_disk() {
+    _disk_lines="$(list_target_disks)"
+    [ -n "$_disk_lines" ] || error "No target disks found.  Pass a device explicitly."
+
+    printf '\nAvailable target disks:\n'
+    _choices_file="/tmp/qos-install-choices.$$"
+    printf '%s\n' "$_disk_lines" > "$_choices_file"
+
+    _idx=1
+    while IFS='|' read -r _path _size _model; do
+        [ -n "$_path" ] || continue
+        printf '  %s) %s  %s  %s\n' "$_idx" "$_path" "$_size" "$_model"
+        _idx=$(( _idx + 1 ))
+    done < "$_choices_file"
+
+    while :; do
+        printf 'Select target disk [1-%s]: ' $(( _idx - 1 ))
+        read -r _selection
+        case "$_selection" in
+            ''|*[!0-9]*)
+                warn "Please enter a number."
+                ;;
+            *)
+                if [ "$_selection" -ge 1 ] && [ "$_selection" -lt "$_idx" ]; then
+                    TARGET_DEV="$(sed -n "${_selection}p" "$_choices_file" | cut -d'|' -f1)"
+                    rm -f "$_choices_file"
+                    [ -n "$TARGET_DEV" ] || error "Invalid disk selection"
+                    log "selected: $TARGET_DEV"
+                    return 0
+                fi
+                warn "Selection out of range."
+                ;;
+        esac
+    done
+}
+
+[ -n "$TARGET_DEV" ] || pick_target_disk
+
+if [ "$TEST_MODE" = "1" ] && [ "${QOS_INSTALL_TEST_EXIT_AFTER_SELECT:-0}" = "1" ]; then
+    exit 0
+fi
+
+[ -b "$TARGET_DEV" ] || error "Not a block device: $TARGET_DEV"
+[ "$(id -u)" = "0" ]  || error "Must run as root"
+
+# ── Tool check ──────────────────────────────────────────────────────────────
+for _cmd in sgdisk mkfs.ext4 mkfs.vfat mount umount tar blockdev; do
+    command -v "$_cmd" >/dev/null 2>&1 || error "Required tool missing: $_cmd"
+done
 
 # ── Disk info ───────────────────────────────────────────────────────────────
 DISK_SIZE_BYTES="$(blockdev --getsize64 "$TARGET_DEV" 2>/dev/null || echo 0)"

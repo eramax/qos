@@ -24,6 +24,8 @@ mkdir -p "$cache_root"
 if [[ "${LIMINE_INSTALL_MOCK:-0}" == "1" ]]; then
   cp "$limine_config" "$limine_stage_dir/limine.conf"
   cp "$limine_config" "$limine_stage_dir/EFI/BOOT/limine.conf"
+  cp "$kernel_dir/vmlinuz" "$limine_stage_dir/vmlinuz"
+  cp "$initramfs_dir/initramfs.img" "$limine_stage_dir/initramfs.img"
   printf '%s\n' "mock UEFI bootloader" > "$limine_stage_dir/EFI/BOOT/BOOTX64.EFI"
   printf '%s\n' "mock Limine stage" > "$limine_stage_dir/EFI/BOOT/README.txt"
   echo "limine install skipped (mock mode)"

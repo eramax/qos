@@ -38,8 +38,10 @@ if [[ "$mode" == "qemu-iso" ]]; then
   QEMU_SERIAL_MODE=stdio QEMU_ISO="$iso_path" exec "$script_dir/run-qemu.sh" ""
 fi
 
-[[ -n "$image_path" ]] || die "usage: $0 [--qemu|--qemu-iso|--smoke] <image-path>"
-[[ -f "$image_path" ]] || die "missing image artifact: $image_path"
+if [[ "${QEMU_BOOT_DISK:-primary}" != "installed" ]]; then
+  [[ -n "$image_path" ]] || die "usage: $0 [--qemu|--qemu-iso|--smoke] <image-path>"
+  [[ -f "$image_path" ]] || die "missing image artifact: $image_path"
+fi
 
 if [[ "$mode" == "qemu" ]]; then
   QEMU_SERIAL_MODE=stdio exec "$script_dir/run-qemu.sh" "$image_path"

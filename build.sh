@@ -31,20 +31,16 @@ manifest_add "command: $ROOT/build.sh BUILD_MOCK=${BUILD_MOCK:-1}"
 cleanup_generated_outputs() {
   for path in \
     "$ROOT/build/rootfs" \
-    "$ROOT/build/kernel" \
     "$ROOT/build/initramfs" \
-    "$ROOT/build/boot" \
-    "$ROOT/build/image"
+    "$ROOT/build/boot"
   do
     [[ -e "$path" ]] && chmod -R u+w "$path" 2>/dev/null || true
   done
   rm -rf \
     "$ROOT/build/rootfs" \
-    "$ROOT/build/kernel" \
     "$ROOT/build/initramfs" \
-    "$ROOT/build/boot" \
-    "$ROOT/build/image"
-  rm -f "$ROOT"/dist/*.raw
+    "$ROOT/build/boot"
+  rm -f "$ROOT"/dist/*.iso
 }
 
 on_exit() {
@@ -59,6 +55,19 @@ trap on_exit EXIT
 
 cleanup_generated_outputs
 
+ensure_kernel_artifacts() {
+  local kernel_dir="$ROOT/build/kernel"
+  local kernel_image="$kernel_dir/build/arch/x86/boot/bzImage"
+
+  if [[ -f "$kernel_image" ]]; then
+    manifest_add "kernel: reused existing artifacts"
+    return 0
+  fi
+
+  manifest_add "kernel: rebuilt because artifacts were missing"
+  KERNEL_BUILD_DIR="$kernel_dir" "$script_dir/scripts/build-kernel.sh"
+}
+
 build_mock="${BUILD_MOCK:-1}"
 if [[ "$build_mock" != "1" ]]; then
   manifest_add "mode: real"
@@ -68,7 +77,7 @@ if [[ "$build_mock" != "1" ]]; then
     die "injected failure after rootfs stage"
   fi
 
-  KERNEL_BUILD_DIR="$ROOT/build/kernel" "$script_dir/scripts/build-kernel.sh"
+  ensure_kernel_artifacts
   INITRAMFS_BUILD_DIR="$ROOT/build/initramfs" ROOTFS_DIR="$ROOT/build/rootfs" "$script_dir/scripts/build-initramfs.sh"
   if [[ "${BUILD_FAIL_AFTER_STAGE:-}" == "kernel" ]]; then
     die "injected failure after kernel stage"
@@ -82,16 +91,15 @@ if [[ "$build_mock" != "1" ]]; then
     die "injected failure after limine stage"
   fi
 
-  IMAGE_BUILD_DIR="$ROOT/build/image" \
-    IMAGE_OUTPUT_DIR="$ROOT/dist" \
-    ROOTFS_DIR="$ROOT/build/rootfs" \
-    BOOT_STAGE_DIR="$ROOT/build/boot" \
-    "$script_dir/scripts/assemble-image.sh"
-  if [[ "${BUILD_FAIL_AFTER_STAGE:-}" == "image" ]]; then
-    die "injected failure after image stage"
+  ISO_OUTPUT_DIR="$ROOT/dist" \
+  ROOTFS_DIR="$ROOT/build/rootfs" \
+  BOOT_STAGE_DIR="$ROOT/build/boot" \
+  bash "$script_dir/scripts/build-iso.sh"
+  if [[ "${BUILD_FAIL_AFTER_STAGE:-}" == "iso" ]]; then
+    die "injected failure after iso stage"
   fi
 
-  echo "build complete: dist/qos-x86_64.raw"
+  echo "build complete: dist/qos-x86_64.iso"
   exit 0
 fi
 
@@ -107,7 +115,9 @@ if [[ "${BUILD_FAIL_AFTER_STAGE:-}" == "rootfs" ]]; then
   die "injected failure after rootfs stage"
 fi
 
-KERNEL_BUILD_MOCK=1 KERNEL_BUILD_DIR="$ROOT/build/kernel" "$script_dir/scripts/build-kernel.sh"
+if [[ ! -f "$ROOT/build/kernel/build/arch/x86/boot/bzImage" ]]; then
+  KERNEL_BUILD_MOCK=1 KERNEL_BUILD_DIR="$ROOT/build/kernel" "$script_dir/scripts/build-kernel.sh"
+fi
 INITRAMFS_BUILD_MOCK=1 INITRAMFS_BUILD_DIR="$ROOT/build/initramfs" "$script_dir/scripts/build-initramfs.sh"
 if [[ "${BUILD_FAIL_AFTER_STAGE:-}" == "kernel" ]]; then
   die "injected failure after kernel stage"
@@ -122,14 +132,13 @@ if [[ "${BUILD_FAIL_AFTER_STAGE:-}" == "limine" ]]; then
   die "injected failure after limine stage"
 fi
 
-IMAGE_BUILD_MOCK=1 \
+ISO_BUILD_MOCK=1 \
   ROOTFS_DIR="$ROOT/build/rootfs" \
   BOOT_STAGE_DIR="$ROOT/build/boot" \
-  IMAGE_BUILD_DIR="$ROOT/build/image" \
-  IMAGE_OUTPUT_DIR="$ROOT/dist" \
-  "$script_dir/scripts/assemble-image.sh"
-if [[ "${BUILD_FAIL_AFTER_STAGE:-}" == "image" ]]; then
-  die "injected failure after image stage"
+  ISO_OUTPUT_DIR="$ROOT/dist" \
+  bash "$script_dir/scripts/build-iso.sh"
+if [[ "${BUILD_FAIL_AFTER_STAGE:-}" == "iso" ]]; then
+  die "injected failure after iso stage"
 fi
 
-echo "build complete: dist/qos-x86_64.raw"
+echo "build complete: dist/qos-x86_64.iso"

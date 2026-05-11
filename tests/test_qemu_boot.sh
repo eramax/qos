@@ -16,12 +16,21 @@ repo_root="$(cd "$here/.." && pwd -P)"
 grep -q 'scripts/qemu-host-net-up.sh' "$repo_root/README.md" || die "README must document qemu-host-net-up.sh"
 grep -q 'scripts/qemu-host-net-down.sh' "$repo_root/README.md" || die "README must document qemu-host-net-down.sh"
 grep -q 'QEMU_BRIDGE_IFACE=br0' "$repo_root/README.md" || die "README must document explicit br0 usage"
+grep -q 'make full' "$repo_root/README.md" || die "README must document make full"
+grep -q 'make live' "$repo_root/README.md" || die "README must document make live"
+grep -q 'make qemu' "$repo_root/README.md" || die "README must document make qemu"
+grep -q 'make kernel' "$repo_root/README.md" || die "README must document make kernel"
 grep -qxF 'QEMU_MEMORY ?= 1G' "$repo_root/Makefile" || die "make qemu default memory must be 1G"
 grep -qxF 'QEMU_CPUS ?= 2' "$repo_root/Makefile" || die "make qemu default cpu count must be 2"
 grep -qxF 'QEMU_NET_MODE ?= tap' "$repo_root/Makefile" || die "make qemu default network mode must be tap"
 grep -qxF 'QEMU_BRIDGE_IFACE ?= br0' "$repo_root/Makefile" || die "make qemu default bridge interface must be br0"
 ! grep -qxF 'QEMU_BRIDGE_IFACE ?= auto' "$repo_root/Makefile" || die "make qemu must not default bridge interface to auto"
+grep -q "'full         - build the live ISO" "$repo_root/Makefile" || die "make help must describe full as the live ISO build"
+grep -q "'live         - boot the live ISO in QEMU" "$repo_root/Makefile" || die "make help must describe live target"
+grep -q "'qemu         - boot from the installed disk" "$repo_root/Makefile" || die "make help must describe installed-disk qemu target"
 grep -q "scripts/qemu-host-net-up.sh first" "$repo_root/Makefile" || die "make help must mention qemu-host-net-up.sh prerequisite"
+! grep -q "'qemu2" "$repo_root/Makefile" || die "make help must not advertise qemu2"
+! grep -q "'boot         -" "$repo_root/Makefile" || die "make help must not advertise boot"
 [[ -x "$repo_root/scripts/qemu-tap.sh" ]] || die "missing qemu tap helper"
 
 stage_base="$(mktemp -d "$repo_root/build/task7-qemu.XXXXXX")"
@@ -81,5 +90,12 @@ QEMU_OVMF_VARS_RUNTIME="$stage_base/OVMF_VARS.fd" \
   die "bridge mode must fail when the requested bridge does not exist"
 fi
 grep -q 'error: missing bridge interface: definitely-not-a-bridge' "$missing_bridge_stderr" || die "missing explicit bridge failure message"
+
+installed_log="$stage_base/installed.log"
+QEMU_RUN_MOCK=1 \
+QEMU_BOOT_DISK=installed \
+QEMU_LOG_FILE="$installed_log" \
+  "$repo_root/scripts/run-qemu.sh" >/dev/null
+grep -qxF 'network: tap via helper' "$installed_log" || die "installed-disk boot must not require a raw image artifact"
 
 echo "ok"

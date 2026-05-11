@@ -24,16 +24,11 @@ Minimal Alpine-style x86_64 server distro optimized for <64MB image size and <40
 ### Build
 
 ```bash
-# Clean build from scratch
+# Main build: rebuild rootfs/services/initramfs and produce the live ISO
 make full
 
-# Or step-by-step
-make rootfs      # Build rootfs
-make services    # Install services
-make kernel      # Build kernel
-make initramfs   # Build initramfs
-make boot-limine # Stage bootloader
-make image       # Assemble 64MB image
+# Rebuild kernel explicitly after kernel config/version changes
+make kernel
 ```
 
 ### Boot
@@ -43,16 +38,10 @@ make image       # Assemble 64MB image
 sudo scripts/qemu-host-net-up.sh
 
 # Boot live ISO in QEMU using the prepared bridge
-QEMU_BRIDGE_IFACE=br0 make qemu
-
-# Boot raw disk image (requires the prepared bridge for tap mode)
-QEMU_BRIDGE_IFACE=br0 make boot
+QEMU_BRIDGE_IFACE=br0 make live
 
 # Boot from installed disk (after qos-install)
-QEMU_BRIDGE_IFACE=br0 make qemu2
-
-# Smoke boot with log capture
-make smoke
+QEMU_BRIDGE_IFACE=br0 make qemu
 
 # Tear down host networking when finished
 sudo scripts/qemu-host-net-down.sh
@@ -61,12 +50,9 @@ sudo scripts/qemu-host-net-down.sh
 ### Flash to Disk
 
 ```bash
-# Flash 256MB image to disk
-sudo dd if=dist/qos-x86_64.raw of=/dev/sdX bs=4M status=progress
-
-# Or install from running system with GPT partitioning
+# Install from the live system with GPT partitioning
 ssh root@<ip>
-qos-install --auto /dev/sda
+qos-install
 # Creates: EFI (64MB, GPT EF00) + Root (128MB) + Var (remaining)
 ```
 
@@ -80,9 +66,9 @@ qos-install --auto /dev/sda
 ## Current Status
 
 - ✅ Image build pipeline works end-to-end
-- ✅ Disk image assembled into `dist/qos-x86_64.raw` (64MB)
+- ✅ Live ISO build assembled into `dist/qos-x86_64.iso`
 - ✅ Guest boots through OVMF, Limine, kernel, initramfs, and s6-linux-init
-- ✅ Rootfs staging, Limine staging, initramfs generation, and image assembly scripted
+- ✅ Rootfs staging, Limine staging, initramfs generation, and ISO assembly scripted
 - ✅ Makefile available for short commands
 - ✅ QEMU uses an explicit `br0` bridge contract through the repo-managed TAP helper
 - ✅ Wi-Fi-safe host bridge workflow available through `scripts/qemu-host-net-up.sh` and `scripts/qemu-host-net-down.sh`
@@ -170,13 +156,10 @@ make build-grep
 sudo scripts/qemu-host-net-up.sh
 
 # Boot with live serial output through the prepared bridge
-QEMU_BRIDGE_IFACE=br0 make qemu
+QEMU_BRIDGE_IFACE=br0 make live
 
-# Pack current payload into raw image
-make image
-
-# Boot, SSH in, install btop, run it
-make ssh-test
+# Rebuild kernel explicitly when needed
+make kernel
 
 # Tear down host networking when finished
 sudo scripts/qemu-host-net-down.sh

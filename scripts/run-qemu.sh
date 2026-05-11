@@ -32,7 +32,9 @@ configure_nat_network() {
   fi
 }
 
-[[ -n "$image_path" || -n "${QEMU_ISO:-}" ]] || die "usage: $0 <image-path>"
+if [[ "$boot_disk" != "installed" ]]; then
+  [[ -n "$image_path" || -n "${QEMU_ISO:-}" ]] || die "usage: $0 <image-path>"
+fi
 if [[ -n "$image_path" ]]; then
   [[ -f "$image_path" ]] || die "missing image artifact: $image_path"
 fi

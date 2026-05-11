@@ -18,14 +18,42 @@ if [ ! -x "$QGA_BIN" ]; then
 fi
 
 # Create virtio-serial device path if it exists
-VIRTIO_PATH="/dev/virtio-ports/org.qemu.guest_agent.0"
+VIRTIO_PORT_NAME="org.qemu.guest_agent.0"
+VIRTIO_PATH="/dev/virtio-ports/$VIRTIO_PORT_NAME"
+
+resolve_virtio_path() {
+    if [ -e "$VIRTIO_PATH" ]; then
+        printf '%s\n' "$VIRTIO_PATH"
+        return 0
+    fi
+
+    for port_dir in /sys/class/virtio-ports/*; do
+        [ -e "$port_dir" ] || continue
+        if [ "$(cat "$port_dir/name" 2>/dev/null || true)" != "$VIRTIO_PORT_NAME" ]; then
+            continue
+        fi
+
+        port_suffix="${port_dir##*/}"
+        case "$port_suffix" in
+            vport*) port_dev="/dev/vport${port_suffix#vport}" ;;
+            *)      port_dev="/dev/$port_suffix" ;;
+        esac
+        if [ -e "$port_dev" ]; then
+            ln -sf "$port_dev" "$VIRTIO_PATH" 2>/dev/null || true
+            printf '%s\n' "$port_dev"
+            return 0
+        fi
+    done
+
+    return 1
+}
 
 # Check if virtio channel exists
-if [ ! -e "$VIRTIO_PATH" ]; then
+if ! RESOLVED_VIRTIO_PATH="$(resolve_virtio_path)"; then
     echo "Warning: QEMU virtio-serial channel not found, guest agent will wait"
     # Wait for device to appear (hotplug support)
     for i in 1 2 3 4 5; do
-        if [ -e "$VIRTIO_PATH" ]; then
+        if RESOLVED_VIRTIO_PATH="$(resolve_virtio_path)"; then
             break
         fi
         sleep 1
@@ -34,9 +62,9 @@ fi
 
 # Start QEMU guest agent
 exec 2>&1
-if [ -e "$VIRTIO_PATH" ]; then
-    echo "Starting QEMU guest agent on $VIRTIO_PATH"
-    exec "$QGA_BIN" -d -p "$VIRTIO_PATH" -l "$QGA_LOG/qemu-ga.log" -s "$QGA_STATE/qemu-ga.state"
+if [ -n "${RESOLVED_VIRTIO_PATH:-}" ] && [ -e "$RESOLVED_VIRTIO_PATH" ]; then
+    echo "Starting QEMU guest agent on $RESOLVED_VIRTIO_PATH"
+    exec "$QGA_BIN" -p "$RESOLVED_VIRTIO_PATH" -l "$QGA_LOG/qemu-ga.log" -s "$QGA_STATE/qemu-ga.state"
 else
     echo "Warning: Virtio channel not available, guest agent disabled"
     exec sleep infinity
