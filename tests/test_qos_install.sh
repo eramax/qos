@@ -20,6 +20,19 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 picker_output="$stage_base/picker.out"
+fallback_output="$stage_base/fallback.out"
+fake_sys="$stage_base/sys-block"
+
+mkdir -p "$fake_sys/vda/device" "$fake_sys/vda"
+printf '2097152\n' > "$fake_sys/vda/size"
+printf 'Virtio Disk\n' > "$fake_sys/vda/device/model"
+
+mkdir -p "$fake_sys/nvme0n1/device" "$fake_sys/nvme0n1"
+printf '1048576\n' > "$fake_sys/nvme0n1/size"
+printf 'NVMe Disk\n' > "$fake_sys/nvme0n1/device/model"
+
+mkdir -p "$fake_sys/vda1"
+printf '1\n' > "$fake_sys/vda1/partition"
 
 printf '2\n' | \
 QOS_INSTALL_TEST_MODE=1 \
@@ -32,5 +45,17 @@ grep -q 'Available target disks:' "$picker_output" || die "missing disk picker h
 grep -q '1) /dev/vda' "$picker_output" || die "missing first disk option"
 grep -q '2) /dev/sda' "$picker_output" || die "missing second disk option"
 grep -q 'selected: /dev/sda' "$picker_output" || die "disk picker did not select numbered option"
+
+printf '2\n' | \
+QOS_INSTALL_TEST_MODE=1 \
+QOS_INSTALL_TEST_SYS_BLOCK_DIR="$fake_sys" \
+QOS_INSTALL_TEST_DISABLE_LSBLK=1 \
+QOS_INSTALL_TEST_EXIT_AFTER_SELECT=1 \
+  "$repo_root/scripts/qos-install.sh" >"$fallback_output"
+
+grep -q '1) /dev/nvme0n1' "$fallback_output" || die "missing fallback nvme disk option"
+grep -q '2) /dev/vda' "$fallback_output" || die "missing fallback virtio disk option"
+! grep -q '/dev/vda1' "$fallback_output" || die "fallback picker must not list partitions"
+grep -q 'selected: /dev/vda' "$fallback_output" || die "fallback picker did not select numbered option"
 
 echo "ok"

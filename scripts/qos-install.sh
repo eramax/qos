@@ -75,18 +75,50 @@ list_target_disks() {
         return 0
     fi
 
-    command -v lsblk >/dev/null 2>&1 || error "Required tool missing: lsblk"
-    lsblk -dn -o PATH,TYPE,SIZE,MODEL 2>/dev/null | awk '
-        $2 == "disk" {
-            path=$1
-            size=$3
-            $1=""; $2=""; $3=""
-            sub(/^[[:space:]]+/, "", $0)
-            model=$0
-            if (model == "") model="-"
-            printf "%s|%s|%s\n", path, size, model
-        }
-    '
+    if [ "${QOS_INSTALL_TEST_DISABLE_LSBLK:-0}" != "1" ] && command -v lsblk >/dev/null 2>&1; then
+        lsblk -dn -o PATH,TYPE,SIZE,MODEL 2>/dev/null | awk '
+            $2 == "disk" {
+                path=$1
+                size=$3
+                $1=""; $2=""; $3=""
+                sub(/^[[:space:]]+/, "", $0)
+                model=$0
+                if (model == "") model="-"
+                printf "%s|%s|%s\n", path, size, model
+            }
+        '
+        return 0
+    fi
+
+    _sys_block_dir="${QOS_INSTALL_TEST_SYS_BLOCK_DIR:-/sys/class/block}"
+    [ -d "$_sys_block_dir" ] || error "No target disks found.  Missing $_sys_block_dir"
+
+    for _entry in "$_sys_block_dir"/*; do
+        [ -e "$_entry" ] || continue
+        _name="$(basename "$_entry")"
+
+        case "$_name" in
+            loop*|ram*|fd*|sr*) continue ;;
+        esac
+
+        [ ! -f "$_entry/partition" ] || continue
+
+        _path="/dev/$_name"
+        _size_sectors="$(cat "$_entry/size" 2>/dev/null || echo 0)"
+        _size_bytes=$(( _size_sectors * 512 ))
+        _size_mib=$(( (_size_bytes + 1024 * 1024 - 1) / 1024 / 1024 ))
+
+        if [ "$_size_mib" -ge 1024 ]; then
+            _size_gib=$(( (_size_mib + 1023) / 1024 ))
+            _size="${_size_gib}G"
+        else
+            _size="${_size_mib}M"
+        fi
+
+        _model="$(cat "$_entry/device/model" 2>/dev/null || echo "-")"
+        _model="$(printf '%s' "$_model" | tr -s ' ')"
+        printf '%s|%s|%s\n' "$_path" "$_size" "$_model"
+    done | sort
 }
 
 pick_target_disk() {
