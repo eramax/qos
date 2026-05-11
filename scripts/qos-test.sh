@@ -143,7 +143,7 @@ printf "\n"
 # --------------------------------------------------
 section "1. CORE SYSTEM TESTS"
 
-run_test "Kernel version is 6.19.x" "uname -r | grep -q '6.19'"
+run_test "Kernel version is 7.0.0" "uname -r | grep -q '7.0.0'"
 run_test "Hostname is set" "hostname | grep -q 'qos'"
 run_test "Shell is ash/busybox" "ls -la /bin/sh | grep -q 'busybox\|ash'"
 run_test "Package manager (apk) works" "apk --version >/dev/null 2>&1"
