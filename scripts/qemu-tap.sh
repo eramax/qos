@@ -7,7 +7,27 @@ die() {
   exit 1
 }
 
+mock_mode="${QEMU_TAP_MOCK:-0}"
+
+print_cmd() {
+  local first=1
+  local arg
+  for arg in "$@"; do
+    if [[ $first -eq 1 ]]; then
+      printf '%s' "$arg"
+      first=0
+    else
+      printf ' %s' "$arg"
+    fi
+  done
+  printf '\n'
+}
+
 run_privileged() {
+  if [[ "$mock_mode" == "1" ]]; then
+    print_cmd "$@"
+    return 0
+  fi
   if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
     "$@"
   else
@@ -23,7 +43,9 @@ owner_user="${SUDO_USER:-$(id -un)}"
 case "$command" in
   setup)
     [[ -n "$tap_iface" && -n "$bridge_iface" ]] || die "usage: $0 setup <tap-iface> <bridge-iface>"
-    run_privileged ip link set "$bridge_iface" up
+    if [[ "$mock_mode" != "1" ]]; then
+      [[ -d "/sys/class/net/$bridge_iface/bridge" ]] || die "missing bridge interface: $bridge_iface"
+    fi
     run_privileged ip tuntap add dev "$tap_iface" mode tap user "$owner_user"
     run_privileged ip link set "$tap_iface" master "$bridge_iface"
     run_privileged ip link set "$tap_iface" up

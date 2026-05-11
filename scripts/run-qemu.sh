@@ -11,32 +11,25 @@ image_path="${QEMU_IMAGE:-${1:-}}"
 log_file="${QEMU_LOG_FILE:-$root/build/qemu/serial.log}"
 serial_mode="${QEMU_SERIAL_MODE:-file}"
 net_mode="${QEMU_NET_MODE:-tap}"
-bridge_iface="${QEMU_BRIDGE_IFACE:-auto}"
+bridge_iface="${QEMU_BRIDGE_IFACE:-br0}"
 tap_iface="${QEMU_TAP_IFACE:-q${BASHPID:-$$}}"
 boot_disk="${QEMU_BOOT_DISK:-primary}"  # primary or installed
 
-select_bridge_iface() {
-  local requested="${1:-br0}"
-  local candidate
-
-  if [[ "$requested" != "auto" && -d "/sys/class/net/$requested/bridge" ]]; then
-    printf '%s\n' "$requested"
-    return 0
+nat_network_line() {
+  if [[ -n "${QEMU_HOSTFWD_PORT:-2222}" && "${QEMU_HOSTFWD_PORT:-2222}" != "none" ]]; then
+    printf 'network: nat via 127.0.0.1:%s -> 22\n' "${QEMU_HOSTFWD_PORT:-2222}"
+  else
+    printf 'network: nat without host forwarding\n'
   fi
+}
 
-  if [[ -d "/sys/class/net/br0/bridge" ]]; then
-    printf '%s\n' "br0"
-    return 0
+configure_nat_network() {
+  local hostfwd_port="${QEMU_HOSTFWD_PORT:-2222}"
+  if [[ -n "$hostfwd_port" && "$hostfwd_port" != "none" ]]; then
+    qemu_netdev_arg=(-netdev "user,id=net0,hostfwd=tcp:127.0.0.1:${hostfwd_port}-:22")
+  else
+    qemu_netdev_arg=(-netdev "user,id=net0")
   fi
-
-  for candidate in /sys/class/net/*; do
-    candidate="${candidate##*/}"
-    [[ -d "/sys/class/net/$candidate/bridge" ]] || continue
-    printf '%s\n' "$candidate"
-    return 0
-  done
-
-  return 1
 }
 
 [[ -n "$image_path" || -n "${QEMU_ISO:-}" ]] || die "usage: $0 <image-path>"
@@ -50,11 +43,7 @@ fi
 
 if [[ "${QEMU_RUN_MOCK:-0}" == "1" ]]; then
   if [[ "$net_mode" == "nat" ]]; then
-    if [[ -n "${QEMU_HOSTFWD_PORT:-2222}" && "${QEMU_HOSTFWD_PORT:-2222}" != "none" ]]; then
-      network_line="network: nat via 127.0.0.1:${QEMU_HOSTFWD_PORT:-2222} -> 22"
-    else
-      network_line="network: nat without host forwarding"
-    fi
+    network_line="$(nat_network_line)"
   else
     network_line="network: tap via helper"
   fi
@@ -116,8 +105,6 @@ if [[ ! -f "$extra_disk" ]]; then
   truncate -s "$extra_disk_size" "$extra_disk"
 fi
 
-hostfwd_port="${QEMU_HOSTFWD_PORT:-2222}"
-
 if [[ "$serial_mode" == "file" ]]; then
   qemu_serial_arg=(-serial "file:$log_file")
 else
@@ -126,10 +113,10 @@ fi
 
 case "$net_mode" in
   tap)
-    bridge_iface_resolved="$(select_bridge_iface "$bridge_iface")" || die "missing bridge interface: $bridge_iface"
+    [[ -d "/sys/class/net/$bridge_iface/bridge" ]] || die "missing bridge interface: $bridge_iface"
     qemu_tap_setup_script="$script_dir/qemu-tap.sh"
     [[ -x "$qemu_tap_setup_script" ]] || die "missing tap helper: $qemu_tap_setup_script"
-    "$qemu_tap_setup_script" setup "$tap_iface" "$bridge_iface_resolved"
+    "$qemu_tap_setup_script" setup "$tap_iface" "$bridge_iface"
     cleanup_tap() {
       "$qemu_tap_setup_script" cleanup "$tap_iface" >/dev/null 2>&1 || true
     }
@@ -137,11 +124,7 @@ case "$net_mode" in
     qemu_netdev_arg=(-netdev "tap,id=net0,ifname=${tap_iface},script=no,downscript=no")
     ;;
   nat)
-    if [[ -n "$hostfwd_port" && "$hostfwd_port" != "none" ]]; then
-      qemu_netdev_arg=(-netdev "user,id=net0,hostfwd=tcp:127.0.0.1:${hostfwd_port}-:22")
-    else
-      qemu_netdev_arg=(-netdev "user,id=net0")
-    fi
+    configure_nat_network
     ;;
   *)
     die "unsupported QEMU_NET_MODE: $net_mode"

@@ -13,10 +13,15 @@ repo_root="$(cd "$here/.." && pwd -P)"
 [[ -x "$repo_root/scripts/run-qemu.sh" ]] || die "missing run-qemu.sh"
 [[ -x "$repo_root/scripts/assemble-image.sh" ]] || die "missing assemble-image.sh"
 [[ -x "$repo_root/scripts/build-rootfs.sh" ]] || die "missing build-rootfs.sh"
+grep -q 'scripts/qemu-host-net-up.sh' "$repo_root/README.md" || die "README must document qemu-host-net-up.sh"
+grep -q 'scripts/qemu-host-net-down.sh' "$repo_root/README.md" || die "README must document qemu-host-net-down.sh"
+grep -q 'QEMU_BRIDGE_IFACE=br0' "$repo_root/README.md" || die "README must document explicit br0 usage"
 grep -qxF 'QEMU_MEMORY ?= 1G' "$repo_root/Makefile" || die "make qemu default memory must be 1G"
 grep -qxF 'QEMU_CPUS ?= 2' "$repo_root/Makefile" || die "make qemu default cpu count must be 2"
 grep -qxF 'QEMU_NET_MODE ?= tap' "$repo_root/Makefile" || die "make qemu default network mode must be tap"
-grep -qxF 'QEMU_BRIDGE_IFACE ?= auto' "$repo_root/Makefile" || die "make qemu default bridge interface must be auto"
+grep -qxF 'QEMU_BRIDGE_IFACE ?= br0' "$repo_root/Makefile" || die "make qemu default bridge interface must be br0"
+! grep -qxF 'QEMU_BRIDGE_IFACE ?= auto' "$repo_root/Makefile" || die "make qemu must not default bridge interface to auto"
+grep -q "scripts/qemu-host-net-up.sh first" "$repo_root/Makefile" || die "make help must mention qemu-host-net-up.sh prerequisite"
 [[ -x "$repo_root/scripts/qemu-tap.sh" ]] || die "missing qemu tap helper"
 
 stage_base="$(mktemp -d "$repo_root/build/task7-qemu.XXXXXX")"
@@ -25,6 +30,12 @@ cleanup() {
   rm -rf "$stage_base"
 }
 trap cleanup EXIT INT TERM
+
+tap_helper_log="$stage_base/tap-helper.log"
+QEMU_TAP_MOCK=1 "$repo_root/scripts/qemu-tap.sh" setup qtap0 br0 >"$tap_helper_log"
+grep -q 'ip tuntap add dev qtap0 mode tap' "$tap_helper_log" || die "missing tap creation command"
+grep -q 'ip link set qtap0 master br0' "$tap_helper_log" || die "missing tap bridge attach command"
+! grep -q 'ip link add br0 type bridge' "$tap_helper_log" || die "tap helper must not create bridges"
 
 rootfs_dir="$stage_base/rootfs"
 image_build_dir="$stage_base/image"
@@ -60,5 +71,15 @@ QEMU_LOG_FILE="$nat_log" \
 QEMU_IMAGE="$image_output_dir/$image_name" \
   "$repo_root/scripts/run-qemu.sh" >/dev/null
 grep -qxF 'network: nat via 127.0.0.1:2222 -> 22' "$nat_log" || die "missing nat fallback marker"
+
+missing_bridge_stderr="$stage_base/missing-bridge.stderr"
+if QEMU_NET_MODE=tap \
+QEMU_BRIDGE_IFACE=definitely-not-a-bridge \
+QEMU_IMAGE="$image_output_dir/$image_name" \
+QEMU_OVMF_VARS_RUNTIME="$stage_base/OVMF_VARS.fd" \
+  "$repo_root/scripts/run-qemu.sh" >/dev/null 2>"$missing_bridge_stderr"; then
+  die "bridge mode must fail when the requested bridge does not exist"
+fi
+grep -q 'error: missing bridge interface: definitely-not-a-bridge' "$missing_bridge_stderr" || die "missing explicit bridge failure message"
 
 echo "ok"

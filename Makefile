@@ -9,7 +9,7 @@ QEMU_IMAGE ?= dist/qos-x86_64.raw
 QEMU_MEMORY ?= 1G
 QEMU_CPUS ?= 2
 QEMU_NET_MODE ?= tap
-QEMU_BRIDGE_IFACE ?= auto
+QEMU_BRIDGE_IFACE ?= br0
 QEMU_HOSTFWD_PORT ?= none
 QEMU_BOOT_DISK ?= primary  # primary or installed
 
@@ -30,9 +30,9 @@ help:
 		'boot-limine  - stage Limine plus kernel/initramfs into build/boot' \
 		'iso          - build bootable live CD ISO' \
 		'image        - assemble the raw disk image from existing payloads' \
-		'boot         - boot live ISO in QEMU (requires make iso)' \
-		'qemu         - boot raw disk image in QEMU (primary disk)' \
-		'qemu2        - boot from installed disk (secondary disk)' \
+		'boot         - boot raw disk image in QEMU (requires host bridge setup for tap mode)' \
+		'qemu         - boot live ISO in QEMU (run scripts/qemu-host-net-up.sh first for tap mode)' \
+		'qemu2        - boot from installed disk (run scripts/qemu-host-net-up.sh first for tap mode)' \
 		'smoke        - boot $(QEMU_IMAGE) and capture serial output to a log' \
 		'ssh-test     - boot the image and SSH in to install/run btop' \
 		'clean        - remove build outputs'

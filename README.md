@@ -39,17 +39,23 @@ make image       # Assemble 64MB image
 ### Boot
 
 ```bash
-# Boot raw disk image (primary testing)
-make qemu
+# Prepare host networking for Wi-Fi-only hosts
+sudo scripts/qemu-host-net-up.sh
 
-# Boot live ISO (requires make iso)
-make boot
+# Boot live ISO in QEMU using the prepared bridge
+QEMU_BRIDGE_IFACE=br0 make qemu
+
+# Boot raw disk image (requires the prepared bridge for tap mode)
+QEMU_BRIDGE_IFACE=br0 make boot
 
 # Boot from installed disk (after qos-install)
-make qwen2
+QEMU_BRIDGE_IFACE=br0 make qemu2
 
 # Smoke boot with log capture
 make smoke
+
+# Tear down host networking when finished
+sudo scripts/qemu-host-net-down.sh
 ```
 
 ### Flash to Disk
@@ -78,7 +84,8 @@ qos-install --auto /dev/sda
 - ✅ Guest boots through OVMF, Limine, kernel, initramfs, and s6-linux-init
 - ✅ Rootfs staging, Limine staging, initramfs generation, and image assembly scripted
 - ✅ Makefile available for short commands
-- ✅ QEMU defaults to bridged networking through repo-managed TAP helper
+- ✅ QEMU uses an explicit `br0` bridge contract through the repo-managed TAP helper
+- ✅ Wi-Fi-safe host bridge workflow available through `scripts/qemu-host-net-up.sh` and `scripts/qemu-host-net-down.sh`
 - ✅ Build commands and source URLs recorded in `build/build.manifest`
 - ✅ Capability system implemented with example profiles
 - ✅ Reverse proxy service configured (Caddy)
@@ -159,14 +166,20 @@ make build-grep
 ### Boot
 
 ```bash
-# Boot with live serial output
-make boot
+# Prepare host networking before bridge-mode boots
+sudo scripts/qemu-host-net-up.sh
+
+# Boot with live serial output through the prepared bridge
+QEMU_BRIDGE_IFACE=br0 make qemu
 
 # Pack current payload into raw image
 make image
 
 # Boot, SSH in, install btop, run it
 make ssh-test
+
+# Tear down host networking when finished
+sudo scripts/qemu-host-net-down.sh
 ```
 
 ### Runtime
