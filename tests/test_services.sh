@@ -29,7 +29,8 @@ ROOTFS_SKIP_APK=1 ROOTFS_DIR="$rootfs_dir" "$repo_root/scripts/build-rootfs.sh" 
 ROOTFS_DIR="$rootfs_dir" "$repo_root/scripts/install-services.sh" >/dev/null
 
 [[ -f "$rootfs_dir/etc/dropbear/dropbear.conf" ]] || die "missing dropbear config"
-[[ -f "$rootfs_dir/etc/cloud/cloud.cfg.d/05_qos-cloud-init.cfg" ]] || die "missing qos cloud-init config"
+[[ -f "$rootfs_dir/etc/cloud/cloud.cfg" ]] || die "missing base cloud-init config"
+! [[ -f "$rootfs_dir/etc/cloud/cloud.cfg.d/05_qos-cloud-init.cfg" ]] || die "cloud-init drop-in must be removed in favor of base config"
 [[ -f "$rootfs_dir/etc/nftables/nftables.conf" ]] || die "missing nftables config"
 [[ -f "$rootfs_dir/etc/network/interfaces.dhcp" ]] || die "missing DHCP config"
 [[ -x "$rootfs_dir/etc/s6/service-tree/cloud-init-local/run" ]] || die "missing cloud-init local run script"
@@ -52,9 +53,8 @@ ROOTFS_DIR="$rootfs_dir" "$repo_root/scripts/install-services.sh" >/dev/null
 [[ -L "$rootfs_dir/sbin/init" ]] || die "missing init symlink"
 
 grep -qxF 'DROPBEAR_EXTRA_ARGS="-s -j -k"' "$rootfs_dir/etc/dropbear/dropbear.conf" || die "dropbear config is not key-only"
-grep -q '^datasource_list:' "$rootfs_dir/etc/cloud/cloud.cfg.d/05_qos-cloud-init.cfg" || die "cloud-init config must declare datasource order"
-grep -q 'Vultr' "$rootfs_dir/etc/cloud/cloud.cfg.d/05_qos-cloud-init.cfg" || die "cloud-init config must include Vultr datasource"
-grep -q 'NoCloud' "$rootfs_dir/etc/cloud/cloud.cfg.d/05_qos-cloud-init.cfg" || die "cloud-init config must include NoCloud datasource"
+grep -q '^datasource_list: \[ ConfigDrive, NoCloud, None \]$' "$rootfs_dir/etc/cloud/cloud.cfg" || die "cloud-init base config must set generic datasource order"
+! grep -q '^datasource_list: .*Ec2' "$rootfs_dir/etc/cloud/cloud.cfg" || die "cloud-init base config must not probe EC2 on a generic image"
 grep -q 'cloud-init init --local' "$rootfs_dir/etc/s6/service-tree/cloud-init-local/run" || die "cloud-init local service must run init --local"
 grep -q 'cloud-init init' "$rootfs_dir/etc/s6/service-tree/cloud-init/run" || die "cloud-init service must run network stage"
 grep -q 'cloud-init modules --mode=config' "$rootfs_dir/etc/s6/service-tree/cloud-init/run" || die "cloud-init service must run config modules"

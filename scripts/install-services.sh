@@ -55,6 +55,25 @@ cp -a "$root/config/s6/s6-rc.d/." "$etc_dir/s6/s6-rc.d/"
 if [[ -d "$root/config/cloud" ]]; then
   cp -a "$root/config/cloud/." "$etc_dir/cloud/"
 fi
+if [[ -f "$etc_dir/cloud/cloud.cfg" ]]; then
+  tmp_cloud_cfg="$etc_dir/cloud/cloud.cfg.tmp"
+  awk '
+    BEGIN { replaced = 0 }
+    /^[[:space:]]*datasource_list:/ {
+      print "datasource_list: [ ConfigDrive, NoCloud, None ]"
+      replaced = 1
+      next
+    }
+    { print }
+    END {
+      if (!replaced) {
+        print "datasource_list: [ ConfigDrive, NoCloud, None ]"
+      }
+    }
+  ' "$etc_dir/cloud/cloud.cfg" > "$tmp_cloud_cfg"
+  mv "$tmp_cloud_cfg" "$etc_dir/cloud/cloud.cfg"
+fi
+rm -f "$etc_dir/cloud/cloud.cfg.d/05_qos-cloud-init.cfg"
 install -m 0644 "$root/config/dropbear/dropbear.conf" "$etc_dir/dropbear/dropbear.conf"
 if [[ -f "$dropbear_keys_file" ]]; then
   install -m 0600 "$dropbear_keys_file" "$rootfs/root/.ssh/authorized_keys"
