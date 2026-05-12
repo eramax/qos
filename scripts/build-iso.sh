@@ -88,12 +88,14 @@ cat > "$boot_payload/limine.conf" <<'DISKLIMINE'
 timeout: 0
 verbose: yes
 default_entry: 1
+interface_branding: QOS via Limine
+interface_branding_colour: 6
 
 /QOS
     protocol: linux
     kernel_path: boot():/vmlinuz
     module_path: boot():/initramfs.img
-    cmdline: root=LABEL=qos-root-a rootfstype=ext4 rootwait ro console=ttyS0,115200n8 earlycon=uart,io,0x3f8,115200n8 loglevel=7 ignore_loglevel net.ifnames=0 biosdevname=0
+    cmdline: root=LABEL=qos-root-a rootfstype=ext4 rootwait ro console=tty0 console=ttyS0,115200n8 earlycon=uart,io,0x3f8,115200n8 loglevel=7 ignore_loglevel net.ifnames=0 biosdevname=0
 DISKLIMINE
 echo "  Boot payload: $(du -sh "$boot_payload" | awk '{print $1}')"
 
@@ -175,12 +177,14 @@ cat > "$iso_build_dir/limine-live.conf" <<'EOF'
 timeout: 0
 verbose: yes
 default_entry: 1
+interface_branding: QOS Live via Limine
+interface_branding_colour: 6
 
 /QOS Live CD
     protocol: linux
     kernel_path: boot():/vmlinuz
     module_path: boot():/initramfs-live.img
-    cmdline: console=ttyS0,115200n8 earlycon=uart,io,0x3f8,115200n8 loglevel=7 net.ifnames=0 biosdevname=0
+    cmdline: console=tty0 console=ttyS0,115200n8 earlycon=uart,io,0x3f8,115200n8 loglevel=7 net.ifnames=0 biosdevname=0
 EOF
 mcopy -i "$esp_img" "$iso_build_dir/limine-live.conf" ::/limine.conf
 mcopy -i "$esp_img" "$boot_dir/vmlinuz"               ::/vmlinuz
@@ -209,6 +213,6 @@ xorriso -as mkisofs \
 echo ""
 echo "✅ ISO: $iso_output_dir/$iso_name ($(du -sh "$iso_output_dir/$iso_name" | awk '{print $1}'))"
 echo ""
-echo "  make qemu                        # boot live ISO (/dev/vda = install target)"
+echo "  make live                        # boot live ISO (/dev/vda = install target)"
 echo "  qos-install --auto /dev/vda      # inside VM"
-echo "  poweroff && make qemu2           # boot installed system"
+echo "  poweroff && make qemu            # boot installed system"

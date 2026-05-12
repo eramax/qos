@@ -388,12 +388,14 @@ cat > "$MNTBASE/efi/limine.conf" <<'LIMINEOF'
 timeout: 0
 verbose: yes
 default_entry: 1
+interface_branding: QOS via Limine
+interface_branding_colour: 6
 
 /QOS
     protocol: linux
     kernel_path: boot():/vmlinuz
     module_path: boot():/initramfs.img
-    cmdline: root=LABEL=qos-root-a rootfstype=ext4 rootwait ro console=ttyS0,115200n8 earlycon=uart,io,0x3f8,115200n8 loglevel=7 ignore_loglevel net.ifnames=0 biosdevname=0
+    cmdline: root=LABEL=qos-root-a rootfstype=ext4 rootwait ro console=tty0 console=ttyS0,115200n8 earlycon=uart,io,0x3f8,115200n8 loglevel=7 ignore_loglevel net.ifnames=0 biosdevname=0
 LIMINEOF
 
 # Limine also checks EFI/BOOT/limine.conf
@@ -422,6 +424,6 @@ log "  $STATE_PART State ${VAR_SIZE_MB} MB  [label: qos-state]"
 log ""
 log "Next steps:"
 log "  1. poweroff"
-log "  2. make qemu2      (boot from installed disk)"
+log "  2. make qemu       (boot from installed disk)"
 log ""
 log "Log: $INSTALL_LOG"

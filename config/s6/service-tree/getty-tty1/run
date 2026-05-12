@@ -1,0 +1,5 @@
+#!/bin/sh
+set -eu
+
+# Spawn a login shell on the primary VGA console for VNC/IPMI access.
+exec /sbin/getty 115200 tty1

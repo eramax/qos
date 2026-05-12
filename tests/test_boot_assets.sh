@@ -47,6 +47,10 @@ fi
 [[ -f "$boot_dir/EFI/BOOT/BOOTX64.EFI" ]] || die "missing UEFI boot file"
 
 for setting in \
+  "CONFIG_VT=y" \
+  "CONFIG_VT_CONSOLE=y" \
+  "CONFIG_FB=y" \
+  "CONFIG_SYSFB=y" \
   "CONFIG_SMP=y" \
   "CONFIG_PREEMPT_DYNAMIC=y" \
   "CONFIG_PREEMPT_VOLUNTARY=y" \
@@ -69,9 +73,12 @@ done
 
 grep -qxF "verbose: yes" "$boot_dir/limine.conf" || die "missing Limine verbose boot setting"
 grep -qxF "default_entry: 1" "$boot_dir/limine.conf" || die "missing Limine default entry"
+grep -qxF "interface_branding: QOS via Limine" "$boot_dir/limine.conf" || die "missing Limine branding"
+grep -qxF "interface_branding_colour: 6" "$boot_dir/limine.conf" || die "missing Limine branding colour"
 grep -qxF "    protocol: linux" "$boot_dir/limine.conf" || die "missing Limine protocol entry"
 grep -qxF "    kernel_path: boot():/vmlinuz" "$boot_dir/limine.conf" || die "missing Limine kernel path"
 grep -qxF "    module_path: boot():/initramfs.img" "$boot_dir/limine.conf" || die "missing Limine initramfs path"
+grep -qF "console=tty0 console=ttyS0,115200n8" "$boot_dir/limine.conf" || die "missing dual console boot setting"
 grep -qF "earlycon=uart,io,0x3f8,115200n8" "$boot_dir/limine.conf" || die "missing kernel earlycon setting"
 grep -qF "loglevel=7 ignore_loglevel" "$boot_dir/limine.conf" || die "missing kernel loglevel settings"
 grep -q '/usr/sbin/qos-reset' "$repo_root/scripts/apply-rootfs-layout.sh" || die "factory reset command must be installed into the image"

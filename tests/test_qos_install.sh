@@ -11,6 +11,9 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 repo_root="$(cd "$here/.." && pwd -P)"
 
 [[ -x "$repo_root/scripts/qos-install.sh" ]] || die "missing qos-install.sh"
+grep -qF 'interface_branding: QOS via Limine' "$repo_root/scripts/qos-install.sh" || die "installer must write branded Limine config"
+grep -qF 'console=tty0 console=ttyS0,115200n8' "$repo_root/scripts/qos-install.sh" || die "installer must write dual-console Limine cmdline"
+grep -qF 'make qemu       (boot from installed disk)' "$repo_root/scripts/qos-install.sh" || die "installer next-step text must point to make qemu"
 
 stage_base="$(mktemp -d "$repo_root/build/task-qos-install.XXXXXX")"
 cleanup() {
