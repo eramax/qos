@@ -43,7 +43,7 @@ if [[ -f "$etc_dir/shadow" ]]; then
   chmod 0400 "$etc_dir/shadow"
 fi
 
-mkdir -p "$etc_dir/s6/service-tree" "$etc_dir/s6/s6-rc.d" "$etc_dir/dropbear" "$etc_dir/nftables" "$etc_dir/network"
+mkdir -p "$etc_dir/s6/service-tree" "$etc_dir/s6/s6-rc.d" "$etc_dir/dropbear" "$etc_dir/nftables" "$etc_dir/network" "$etc_dir/cloud/cloud.cfg.d"
 
 # Ensure /etc/qos and subdirectories are writable (created read-only in rootfs layout)
 chmod -R u+w "$etc_dir/qos" 2>/dev/null || mkdir -p "$etc_dir/qos"
@@ -52,12 +52,47 @@ mkdir -p "$rootfs/root/.ssh"
 
 cp -a "$root/config/s6/service-tree/." "$etc_dir/s6/service-tree/"
 cp -a "$root/config/s6/s6-rc.d/." "$etc_dir/s6/s6-rc.d/"
+if [[ -d "$root/config/cloud" ]]; then
+  cp -a "$root/config/cloud/." "$etc_dir/cloud/"
+fi
 install -m 0644 "$root/config/dropbear/dropbear.conf" "$etc_dir/dropbear/dropbear.conf"
 if [[ -f "$dropbear_keys_file" ]]; then
   install -m 0600 "$dropbear_keys_file" "$rootfs/root/.ssh/authorized_keys"
 fi
 install -m 0644 "$root/config/nftables/nftables.conf" "$etc_dir/nftables/nftables.conf"
 install -m 0644 "$root/config/network/interfaces.dhcp" "$etc_dir/network/interfaces.dhcp"
+
+# Trim cloud-init's datasource payload to the set this image actually supports.
+# Alpine's cloud-init package brings every datasource module; pruning the unused
+# ones saves space in the live initramfs without baking provider-specific state
+# into the image.
+cloudinit_sources_dir="$(echo "$rootfs"/usr/lib/python*/site-packages/cloudinit/sources)"
+if [[ -d "$cloudinit_sources_dir" ]]; then
+  keep_cloudinit_sources=(
+    DataSourceNoCloud.py
+    DataSourceConfigDrive.py
+    DataSourceVultr.py
+    DataSourceOpenStack.py
+    DataSourceEc2.py
+    DataSourceVMware.py
+    DataSourceNone.py
+  )
+  for ds_path in "$cloudinit_sources_dir"/DataSource*.py; do
+    [[ -e "$ds_path" ]] || continue
+    keep=0
+    ds_name="${ds_path##*/}"
+    for allowed in "${keep_cloudinit_sources[@]}"; do
+      if [[ "$ds_name" == "$allowed" ]]; then
+        keep=1
+        break
+      fi
+    done
+    if [[ "$keep" -eq 0 ]]; then
+      rm -f "$ds_path"
+    fi
+  done
+  rm -rf "$cloudinit_sources_dir/__pycache__"
+fi
 
 # Install capability profiles
 if [[ -d "$root/config/qos/capabilities/profiles" ]]; then

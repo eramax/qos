@@ -1,0 +1,21 @@
+#!/bin/sh
+set -eu
+
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+
+state_dir="/run/qos"
+done_marker="$state_dir/cloud-init-local.done"
+
+mkdir -p "$state_dir"
+
+if ! command -v cloud-init >/dev/null 2>&1; then
+    : > "$done_marker"
+    exec sleep 2147483647
+fi
+
+if ! cloud-init init --local; then
+    echo "cloud-init-local: init --local failed, continuing with fallback networking" >&2
+fi
+
+: > "$done_marker"
+exec sleep 2147483647

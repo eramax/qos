@@ -1,0 +1,51 @@
+#!/bin/sh
+set -eu
+
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+
+state_dir="/run/qos"
+local_done="$state_dir/cloud-init-local.done"
+final_done="$state_dir/cloud-init.done"
+
+mkdir -p "$state_dir"
+
+if ! command -v cloud-init >/dev/null 2>&1; then
+    : > "$final_done"
+    exec sleep 2147483647
+fi
+
+wait_count=0
+while [ ! -f "$local_done" ] && [ "$wait_count" -lt 30 ]; do
+    sleep 1
+    wait_count=$((wait_count + 1))
+done
+
+net_wait=0
+while [ "$net_wait" -lt 30 ]; do
+    if ip -4 route show default 2>/dev/null | grep -q .; then
+        break
+    fi
+    sleep 1
+    net_wait=$((net_wait + 1))
+done
+
+if ! cloud-init init; then
+    echo "cloud-init: init stage failed" >&2
+    : > "$final_done"
+    exec sleep 2147483647
+fi
+
+if ! cloud-init modules --mode=config; then
+    echo "cloud-init: config stage failed" >&2
+    : > "$final_done"
+    exec sleep 2147483647
+fi
+
+if ! cloud-init modules --mode=final; then
+    echo "cloud-init: final stage failed" >&2
+    : > "$final_done"
+    exec sleep 2147483647
+fi
+
+: > "$final_done"
+exec sleep 2147483647

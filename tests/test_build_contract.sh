@@ -20,6 +20,7 @@ grep -qF 'scripts/build-iso.sh' "$repo_root/build.sh" || die "build.sh must buil
 grep -qF 'build/kernel/build/arch/x86/boot/bzImage' "$repo_root/build.sh" || die "build.sh must reuse the real kernel bzImage path"
 grep -qF 'interface_branding: QOS Live via Limine' "$repo_root/scripts/build-iso.sh" || die "build-iso.sh must brand the live Limine interface"
 grep -qF 'console=tty0 console=ttyS0,115200n8' "$repo_root/scripts/build-iso.sh" || die "build-iso.sh must keep VGA and serial consoles enabled"
+grep -qF 'esp_size_kib=$((limine_size_kib + kernel_size_kib + live_initramfs_size_kib + limine_conf_size_kib + esp_overhead_kib))' "$repo_root/scripts/build-iso.sh" || die "build-iso.sh must size the ESP from the actual payload"
 
 tmprepo="$(mktemp -d)"
 outside="$(mktemp -d)"

@@ -13,6 +13,8 @@ repo_root="$(cd "$here/.." && pwd -P)"
 for script in scripts/build-rootfs.sh scripts/install-services.sh; do
   [[ -x "$repo_root/$script" ]] || die "missing $script"
 done
+grep -qxF 'cloud-init' "$repo_root/config/apk/packages.system" || die "system package manifest must include cloud-init"
+grep -qxF 'ifupdown-ng' "$repo_root/config/apk/packages.system" || die "system package manifest must include ifupdown-ng"
 
 stage_base="$(mktemp -d "$repo_root/build/task5.XXXXXX")"
 cleanup() {
@@ -27,8 +29,11 @@ ROOTFS_SKIP_APK=1 ROOTFS_DIR="$rootfs_dir" "$repo_root/scripts/build-rootfs.sh" 
 ROOTFS_DIR="$rootfs_dir" "$repo_root/scripts/install-services.sh" >/dev/null
 
 [[ -f "$rootfs_dir/etc/dropbear/dropbear.conf" ]] || die "missing dropbear config"
+[[ -f "$rootfs_dir/etc/cloud/cloud.cfg.d/05_qos-cloud-init.cfg" ]] || die "missing qos cloud-init config"
 [[ -f "$rootfs_dir/etc/nftables/nftables.conf" ]] || die "missing nftables config"
 [[ -f "$rootfs_dir/etc/network/interfaces.dhcp" ]] || die "missing DHCP config"
+[[ -x "$rootfs_dir/etc/s6/service-tree/cloud-init-local/run" ]] || die "missing cloud-init local run script"
+[[ -x "$rootfs_dir/etc/s6/service-tree/cloud-init/run" ]] || die "missing cloud-init run script"
 [[ -x "$rootfs_dir/etc/s6/service-tree/networking/run" ]] || die "missing networking run script"
 [[ -x "$rootfs_dir/etc/s6/service-tree/dropbear/run" ]] || die "missing dropbear run script"
 [[ -x "$rootfs_dir/etc/s6/service-tree/getty/run" ]] || die "missing serial getty run script"
@@ -46,9 +51,21 @@ ROOTFS_DIR="$rootfs_dir" "$repo_root/scripts/install-services.sh" >/dev/null
 [[ -L "$rootfs_dir/sbin/init" ]] || die "missing init symlink"
 
 grep -qxF 'DROPBEAR_EXTRA_ARGS="-s -j -k"' "$rootfs_dir/etc/dropbear/dropbear.conf" || die "dropbear config is not key-only"
+grep -q '^datasource_list:' "$rootfs_dir/etc/cloud/cloud.cfg.d/05_qos-cloud-init.cfg" || die "cloud-init config must declare datasource order"
+grep -q 'Vultr' "$rootfs_dir/etc/cloud/cloud.cfg.d/05_qos-cloud-init.cfg" || die "cloud-init config must include Vultr datasource"
+grep -q 'NoCloud' "$rootfs_dir/etc/cloud/cloud.cfg.d/05_qos-cloud-init.cfg" || die "cloud-init config must include NoCloud datasource"
+grep -q 'keep_cloudinit_sources' "$repo_root/scripts/install-services.sh" || die "install-services must prune unused cloud-init datasources"
+grep -q 'DataSourceVultr.py' "$repo_root/scripts/install-services.sh" || die "cloud-init pruning must keep the Vultr datasource"
+grep -q 'rm -rf "\$cloudinit_sources_dir/__pycache__"' "$repo_root/scripts/install-services.sh" || die "cloud-init pruning must remove stale datasource bytecode"
+grep -q 'cloud-init init --local' "$rootfs_dir/etc/s6/service-tree/cloud-init-local/run" || die "cloud-init local service must run init --local"
+grep -q 'cloud-init init' "$rootfs_dir/etc/s6/service-tree/cloud-init/run" || die "cloud-init service must run network stage"
+grep -q 'cloud-init modules --mode=config' "$rootfs_dir/etc/s6/service-tree/cloud-init/run" || die "cloud-init service must run config modules"
+grep -q 'cloud-init modules --mode=final' "$rootfs_dir/etc/s6/service-tree/cloud-init/run" || die "cloud-init service must run final modules"
 grep -qxF 'auto eth0' "$rootfs_dir/etc/network/interfaces.dhcp" || die "network config missing auto eth0"
 grep -qxF 'iface eth0 inet dhcp' "$rootfs_dir/etc/network/interfaces.dhcp" || die "network config missing DHCP stanza"
-grep -q '/bin/busybox udhcpc' "$rootfs_dir/etc/s6/service-tree/networking/run" || die "networking service does not use DHCP client"
+grep -q 'cloud-init-local.done' "$rootfs_dir/etc/s6/service-tree/networking/run" || die "networking service must wait for cloud-init local stage"
+grep -q '/sbin/ifup -a' "$rootfs_dir/etc/s6/service-tree/networking/run" || die "networking service must apply cloud-init-rendered network config"
+grep -q '/bin/busybox udhcpc' "$rootfs_dir/etc/s6/service-tree/networking/run" || die "networking service must retain DHCP fallback"
 grep -q '/sbin/getty 115200 ttyS0' "$rootfs_dir/etc/s6/service-tree/getty/run" || die "serial getty must stay on ttyS0"
 grep -q '/sbin/getty 115200 tty1' "$rootfs_dir/etc/s6/service-tree/getty-tty1/run" || die "VGA getty must run on tty1"
 grep -q '/usr/sbin/dropbear -R -F -E' "$rootfs_dir/etc/s6/service-tree/dropbear/run" || die "dropbear service not foregrounded"

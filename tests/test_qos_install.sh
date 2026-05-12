@@ -14,6 +14,8 @@ repo_root="$(cd "$here/.." && pwd -P)"
 grep -qF 'interface_branding: QOS via Limine' "$repo_root/scripts/qos-install.sh" || die "installer must write branded Limine config"
 grep -qF 'console=tty0 console=ttyS0,115200n8' "$repo_root/scripts/qos-install.sh" || die "installer must write dual-console Limine cmdline"
 grep -qF 'make qemu       (boot from installed disk)' "$repo_root/scripts/qos-install.sh" || die "installer next-step text must point to make qemu"
+grep -qF '/var/lib/cloud' "$repo_root/scripts/qos-install.sh" || die "installer must clean cloud-init instance state"
+grep -qF 'cloud-init clean' "$repo_root/scripts/qos-install.sh" || die "installer must reset cloud-init state on installed systems"
 
 stage_base="$(mktemp -d "$repo_root/build/task-qos-install.XXXXXX")"
 cleanup() {

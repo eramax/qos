@@ -161,11 +161,17 @@ echo "  initramfs-live.img: $(du -sh "$live_initramfs" | awk '{print $1}')"
 #
 echo "Creating EFI System Partition image..."
 
-# Size: EFI binary (300K) + limine.conf (1K) + vmlinuz (~7M) +
-#       initramfs-live (~22M) + FAT overhead ≈ 35 MB
-esp_size=40
+# Size dynamically from the actual payload so image growth (for example
+# cloud-init or other rootfs additions) does not overflow the FAT ESP.
+limine_size_kib="$(du -k "$limine_efi" | awk '{print $1}')"
+kernel_size_kib="$(du -k "$boot_dir/vmlinuz" | awk '{print $1}')"
+live_initramfs_size_kib="$(du -k "$live_initramfs" | awk '{print $1}')"
+limine_conf_size_kib=4
+esp_overhead_kib=$((16 * 1024))
+esp_size_kib=$((limine_size_kib + kernel_size_kib + live_initramfs_size_kib + limine_conf_size_kib + esp_overhead_kib))
+esp_size_mib=$(((esp_size_kib + 1023) / 1024))
 esp_img="$iso_build_dir/efi.img"
-truncate -s "${esp_size}M" "$esp_img"
+truncate -s "${esp_size_mib}M" "$esp_img"
 mkfs.vfat -F 12 "$esp_img" >/dev/null
 
 # Populate ESP
@@ -190,7 +196,7 @@ mcopy -i "$esp_img" "$iso_build_dir/limine-live.conf" ::/limine.conf
 mcopy -i "$esp_img" "$boot_dir/vmlinuz"               ::/vmlinuz
 mcopy -i "$esp_img" "$live_initramfs"                  ::/initramfs-live.img
 
-echo "  ESP image: $(du -sh "$esp_img" | awk '{print $1}')"
+echo "  ESP image: $(du -sh "$esp_img" | awk '{print $1}') (payload sized)"
 
 # ── Create ISO ────────────────────────────────────────────────────────────────
 iso_root="$iso_build_dir/iso-root"
