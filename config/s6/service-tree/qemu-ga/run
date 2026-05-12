@@ -64,7 +64,7 @@ fi
 exec 2>&1
 if [ -n "${RESOLVED_VIRTIO_PATH:-}" ] && [ -e "$RESOLVED_VIRTIO_PATH" ]; then
     echo "Starting QEMU guest agent on $RESOLVED_VIRTIO_PATH"
-    exec "$QGA_BIN" -p "$RESOLVED_VIRTIO_PATH" -l "$QGA_LOG/qemu-ga.log" -s "$QGA_STATE/qemu-ga.state"
+    exec "$QGA_BIN" -p "$RESOLVED_VIRTIO_PATH" -l "$QGA_LOG/qemu-ga.log" -t "$QGA_STATE"
 else
     echo "Warning: Virtio channel not available, guest agent disabled"
     exec sleep infinity
