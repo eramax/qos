@@ -53,6 +53,21 @@ mkdir -p "$rootfs/root/.ssh"
 
 cp -a "$root/config/s6/service-tree/." "$etc_dir/s6/service-tree/"
 cp -a "$root/config/s6/s6-rc.d/." "$etc_dir/s6/s6-rc.d/"
+
+# Profile-aware service overlay. QOS_PROFILE selects which extra service
+# templates from config/s6/profile-overlays/<profile>/ get staged. Default
+# is `server`, which has no overlay directory, so this is a no-op for the
+# current build path. See docs/FEATURE-REVIEW-AND-IDEAS.md §2.6.
+qos_profile="${QOS_PROFILE:-server}"
+overlay_dir="$root/config/s6/profile-overlays/$qos_profile"
+if [[ -d "$overlay_dir/service-tree" ]]; then
+  cp -a "$overlay_dir/service-tree/." "$etc_dir/s6/service-tree/"
+fi
+if [[ -d "$overlay_dir/s6-rc.d" ]]; then
+  cp -a "$overlay_dir/s6-rc.d/." "$etc_dir/s6/s6-rc.d/"
+fi
+mkdir -p "$etc_dir/qos"
+printf '%s\n' "$qos_profile" > "$etc_dir/qos/profile"
 if [[ -d "$root/config/cloud" ]]; then
   cp -a "$root/config/cloud/." "$etc_dir/cloud/"
 fi
@@ -135,6 +150,19 @@ if [[ -f "$root/scripts/qos-install.sh" ]]; then
 fi
 if [[ -f "$root/scripts/qos-e2e-full.sh" ]]; then
   install -m 0755 "$root/scripts/qos-e2e-full.sh" "$rootfs/usr/bin/qos-e2e-full"
+fi
+if [[ -f "$root/scripts/qos.sh" ]]; then
+  install -m 0755 "$root/scripts/qos.sh" "$rootfs/usr/bin/qos"
+fi
+if [[ -f "$root/scripts/qos-manifest.sh" ]]; then
+  install -m 0755 "$root/scripts/qos-manifest.sh" "$rootfs/usr/bin/qos-manifest"
+fi
+if [[ -f "$root/scripts/qos-ota.sh" ]]; then
+  install -m 0755 "$root/scripts/qos-ota.sh" "$rootfs/usr/bin/qos-ota"
+fi
+if [[ -f "$root/scripts/lib/test-common.sh" ]]; then
+  install -d -m 0755 "$rootfs/usr/lib"
+  install -m 0644 "$root/scripts/lib/test-common.sh" "$rootfs/usr/lib/qos-test-common.sh"
 fi
 
 # Ensure a udhcpc default script exists so that a granted DHCP lease actually

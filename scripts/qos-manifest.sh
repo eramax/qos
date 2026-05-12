@@ -1,0 +1,261 @@
+#!/usr/bin/env bash
+# qos-manifest - read config/qos.yaml and emit the legacy input files the
+# current build pipeline already consumes. This is the "generator first,
+# authoritative later" step from docs/FEATURE-REVIEW-AND-IDEAS.md §2.4.
+#
+# Subcommands:
+#   gen      Emit files under build/generated/ from config/qos.yaml.
+#   diff     Diff the generated files against the source-of-truth inputs
+#            (config/apk/*, config/image/layout.json). Exits non-zero if
+#            they disagree.
+#   show     Print resolved values for one key (dotted path, debugging).
+#
+# Uses python3 + PyYAML (universally available); does not require yq.
+
+set -euo pipefail
+IFS=$'\n\t'
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+# shellcheck source=/dev/null
+source "$script_dir/lib/common.sh"
+
+ROOT="$(repo_root)"
+MANIFEST="${QOS_MANIFEST:-$ROOT/config/qos.yaml}"
+OUT_DIR="${QOS_MANIFEST_OUT:-$ROOT/build/generated}"
+
+usage() {
+    cat <<EOF
+Usage: qos-manifest <command>
+
+Commands:
+  gen                          Emit files derived from $MANIFEST into $OUT_DIR
+  diff                         Diff generated files vs source-of-truth inputs
+  show <key>                   Print value at dotted path (e.g. profile, image.size)
+  packages --profile <name>    Print resolved package set for a profile
+  profiles                     List defined profiles with descriptions
+  help                         Show this message
+
+Environment:
+  QOS_MANIFEST       Path to qos.yaml (default: config/qos.yaml)
+  QOS_MANIFEST_OUT   Output directory  (default: build/generated)
+EOF
+}
+
+require_manifest() {
+    [[ -f "$MANIFEST" ]] || die "manifest not found: $MANIFEST"
+    require_cmd python3
+    python3 -c 'import yaml' 2>/dev/null \
+        || die "python3 PyYAML missing. Install python3-yaml (apk) / python3-pyyaml (pip)."
+}
+
+cmd_gen() {
+    require_manifest
+    mkdir -p "$OUT_DIR/apk" "$OUT_DIR/image"
+    MANIFEST="$MANIFEST" OUT_DIR="$OUT_DIR" python3 - <<'PY'
+import json
+import os
+import sys
+from pathlib import Path
+
+import yaml
+
+manifest_path = Path(os.environ["MANIFEST"])
+out = Path(os.environ["OUT_DIR"])
+data = yaml.safe_load(manifest_path.read_text())
+
+src_label = "config/qos.yaml"
+
+def emit_pkglist(key, dest, header):
+    pkgs = data.get("packages", {}).get(key, [])
+    lines = [f"# Generated from {src_label} by qos-manifest. Do not edit.",
+             f"# {header}"]
+    lines.extend(pkgs)
+    dest.write_text("\n".join(lines) + "\n")
+
+emit_pkglist("base",   out / "apk" / "packages.base",
+             "Absolute minimum for a working system")
+emit_pkglist("system", out / "apk" / "packages.system",
+             "System packages - essential server utilities")
+
+repos = data.get("repositories", [])
+(out / "apk" / "repositories").write_text(
+    f"# Generated from {src_label} by qos-manifest. Do not edit.\n"
+    + "\n".join(repos) + "\n"
+)
+
+image = data.get("image", {})
+layout = {
+    "boot_mode":       image.get("boot_mode"),
+    "disk_format":     image.get("format"),
+    "partition_table": image.get("partition_table"),
+    "image_size":      image.get("size"),
+    "description":     f"Generated from {src_label}",
+    "partitions":      data.get("partitions", []),
+    "install_tool":    image.get("install_tool"),
+}
+(out / "image" / "layout.json").write_text(
+    json.dumps(layout, indent=2) + "\n"
+)
+
+for p in [out / "apk" / "packages.base",
+          out / "apk" / "packages.system",
+          out / "apk" / "repositories",
+          out / "image" / "layout.json"]:
+    print(p)
+PY
+}
+
+# Normalize a package list for comparison: strip comments and blank lines.
+normalize_pkglist() {
+    sed -e 's/#.*$//' -e 's/[[:space:]]\+$//' -e '/^[[:space:]]*$/d' "$1"
+}
+
+diff_pkglist() {
+    local label="$1" generated="$2" source="$3"
+    local g s
+    g="$(normalize_pkglist "$generated")"
+    s="$(normalize_pkglist "$source")"
+    if [[ "$g" == "$s" ]]; then
+        printf '  ok    %s\n' "$label"
+        return 0
+    fi
+    printf '  DRIFT %s\n' "$label"
+    diff -u <(printf '%s\n' "$s") <(printf '%s\n' "$g") | sed 's/^/        /' || true
+    return 1
+}
+
+diff_layout() {
+    local generated="$1" source="$2"
+    # Compare only structural fields. "description" and "flash_instructions"
+    # are cosmetic and intentionally absent in the generated copy.
+    local g s
+    g="$(python3 -c '
+import json,sys
+d=json.load(open(sys.argv[1]))
+for k in ("description","flash_instructions"): d.pop(k,None)
+print(json.dumps(d,sort_keys=True,indent=2))
+' "$generated")"
+    s="$(python3 -c '
+import json,sys
+d=json.load(open(sys.argv[1]))
+for k in ("description","flash_instructions"): d.pop(k,None)
+print(json.dumps(d,sort_keys=True,indent=2))
+' "$source")"
+    if [[ "$g" == "$s" ]]; then
+        printf '  ok    image/layout.json (structural)\n'
+        return 0
+    fi
+    printf '  DRIFT image/layout.json\n'
+    diff -u <(printf '%s\n' "$s") <(printf '%s\n' "$g") | sed 's/^/        /' || true
+    return 1
+}
+
+cmd_diff() {
+    cmd_gen >/dev/null
+    local rc=0
+    diff_pkglist "apk/packages.base"   "$OUT_DIR/apk/packages.base"   "$ROOT/config/apk/packages.base"   || rc=1
+    diff_pkglist "apk/packages.system" "$OUT_DIR/apk/packages.system" "$ROOT/config/apk/packages.system" || rc=1
+    diff_pkglist "apk/repositories"    "$OUT_DIR/apk/repositories"    "$ROOT/config/apk/repositories"    || rc=1
+    diff_layout  "$OUT_DIR/image/layout.json" "$ROOT/config/image/layout.json"                           || rc=1
+    if [[ $rc -eq 0 ]]; then
+        printf 'manifest matches source-of-truth files.\n'
+    else
+        printf '\nmanifest drift detected. Either update config/qos.yaml\n'
+        printf 'or update the source files in config/ to match.\n'
+    fi
+    return $rc
+}
+
+cmd_show() {
+    require_manifest
+    local key="${1:-}"
+    [[ -n "$key" ]] || die "usage: qos-manifest show <dotted.path>"
+    MANIFEST="$MANIFEST" KEY="$key" python3 - <<'PY'
+import os, sys, yaml
+data = yaml.safe_load(open(os.environ["MANIFEST"]))
+key = os.environ["KEY"].lstrip(".")
+node = data
+for part in key.split(".") if key else []:
+    if isinstance(node, dict) and part in node:
+        node = node[part]
+    else:
+        sys.exit(f"error: no such key: {os.environ['KEY']}")
+if isinstance(node, (dict, list)):
+    print(yaml.safe_dump(node, sort_keys=False).rstrip())
+else:
+    print(node)
+PY
+}
+
+cmd_packages() {
+    require_manifest
+    local profile=""
+    while (( $# > 0 )); do
+        case "$1" in
+            --profile) profile="$2"; shift 2 ;;
+            *) die "usage: qos-manifest packages --profile <name>" ;;
+        esac
+    done
+    [[ -n "$profile" ]] || die "usage: qos-manifest packages --profile <name>"
+    MANIFEST="$MANIFEST" PROFILE="$profile" python3 - <<'PY'
+import os, sys, yaml
+data = yaml.safe_load(open(os.environ["MANIFEST"]))
+profiles = data.get("profiles", {})
+want = os.environ["PROFILE"]
+if want not in profiles:
+    sys.exit(f"error: unknown profile: {want}")
+
+# Compose: base + system + (recursively-extended profile deltas).
+seen = set()
+out = []
+def emit(p):
+    for s in p:
+        if s not in seen:
+            seen.add(s); out.append(s)
+
+emit(data.get("packages", {}).get("base", []))
+emit(data.get("packages", {}).get("system", []))
+
+def walk(name, trail):
+    if name in trail:
+        sys.exit(f"error: profile cycle: {' -> '.join(trail + [name])}")
+    p = profiles[name]
+    parent = p.get("extends")
+    if parent:
+        walk(parent, trail + [name])
+    emit(p.get("packages", []))
+walk(want, [])
+
+for pkg in out:
+    print(pkg)
+PY
+}
+
+cmd_profiles() {
+    require_manifest
+    MANIFEST="$MANIFEST" python3 - <<'PY'
+import os, yaml
+data = yaml.safe_load(open(os.environ["MANIFEST"]))
+default = data.get("profile", "server")
+for name, body in data.get("profiles", {}).items():
+    marker = " (default)" if name == default else ""
+    desc = body.get("description", "")
+    print(f"  {name}{marker}\n    {desc}")
+PY
+}
+
+main() {
+    local cmd="${1:-help}"
+    [[ "$#" -gt 0 ]] && shift || true
+    case "$cmd" in
+        help|-h|--help|'') usage ;;
+        gen)       cmd_gen "$@" ;;
+        diff)      cmd_diff "$@" ;;
+        show)      cmd_show "$@" ;;
+        packages)  cmd_packages "$@" ;;
+        profiles)  cmd_profiles "$@" ;;
+        *) printf 'error: unknown subcommand: %s\n\n' "$cmd" >&2; usage >&2; exit 2 ;;
+    esac
+}
+
+main "$@"

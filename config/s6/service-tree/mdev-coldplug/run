@@ -1,0 +1,40 @@
+#!/bin/sh
+# mdev-coldplug — busybox mdev one-shot at boot.
+#
+# Walks /sys, fires uevents, modprobes the matching kernel modules. This
+# is the "cold-plug probe" half of the mdev story from
+# docs/FEATURE-REVIEW-AND-IDEAS.md §2.3.
+#
+# Pattern: do the work once, then exec sleep so s6-svscan treats this as
+# a long-running service and does not respawn-loop. Matches the
+# `networking` service behavior on the no-op path.
+
+set -eu
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+
+state_dir="/run/qos"
+done_marker="$state_dir/mdev-coldplug.done"
+mkdir -p "$state_dir"
+
+if [ -f "$done_marker" ]; then
+    exec sleep 2147483647
+fi
+
+if ! command -v mdev >/dev/null 2>&1; then
+    echo "mdev-coldplug: mdev not available, skipping" >&2
+    : > "$done_marker"
+    exec sleep 2147483647
+fi
+
+if [ ! -f /etc/mdev.conf ]; then
+    cat > /etc/mdev.conf <<'EOF'
+# Auto-load kernel modules from $MODALIAS for any uevent-emitting device.
+$MODALIAS=.* root:root 0660 @modprobe -b "$MODALIAS"
+EOF
+fi
+
+mdev -s || true
+: > "$done_marker"
+echo "mdev-coldplug: done"
+
+exec sleep 2147483647

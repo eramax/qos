@@ -8,7 +8,17 @@
 ## Quick Navigation
 
 ### 🚀 Getting Started
-1. Read: **[README.md](../README.md)** - Project overview and quick start
+1. **[QOS-COMPLETE-BLUEPRINT.md](QOS-COMPLETE-BLUEPRINT.md)** 💎 THE SOURCE OF TRUTH
+   - Unified master document containing all plans, reviews, and guides.
+   - Start here for a complete overview of the project's future.
+
+2. **[WORKLOAD-PROFILES-GUI-GAMING-K8S.md](WORKLOAD-PROFILES-GUI-GAMING-K8S.md)** 🎮 WORKLOADS
+   - Specifications for GUI, Gaming (Steam), and Kubernetes.
+   - Modular driver management (NVIDIA/AMD).
+   - 32-bit library isolation for Steam.
+   - Performance tuning for high-performance apps.
+
+2. Read: **[README.md](../README.md)** - Project overview and quick start
 2. Build: `make clean && make full`
 3. Boot: `make qemu`
 4. Verify: Follow verification steps below
@@ -17,23 +27,28 @@
 
 Read documents in this order:
 
-1. **[REFACTORING-SUMMARY.md](REFACTORING-SUMMARY.md)** ⭐ START HERE
-   - Complete summary of all changes
-   - What was done and why
-   - Results and metrics
-   - Next steps
+0. **[FEATURE-REQUESTS-SUMMARY.md](FEATURE-REQUESTS-SUMMARY.md)** 📝 FEATURE LIST
+   - Complete technical summary of all requested features.
+   - Target metrics for RAM, LOC, and performance.
+   - Core specifications for Android, GUI, and Build system.
 
-2. **[REFACTORING-AND-VERIFICATION.md](REFACTORING-AND-VERIFICATION.md)** ✅ VERIFY HERE
-   - Detailed verification steps
-   - What to expect for each feature
-   - Troubleshooting guide
-   - Verification checklist
+1. **[QOS-COMPLETE-BLUEPRINT.md](QOS-COMPLETE-BLUEPRINT.md)** 💎 THE SOURCE OF TRUTH
+   - Actionable roadmap for all improvements
+   - Phased milestones (Build, CLI, Security, Tuning)
+   - LOC reduction and consolidation timeline
+   - Immediate next steps
 
-3. **[IMPLEMENTATION-GUIDE.md](IMPLEMENTATION-GUIDE.md)** 🔧 IMPLEMENTATION
-   - How to build and configure
-   - Configuration examples
-   - Hosting workflow examples
-   - Capability system examples
+2. **[PROJECT-REVIEW-2026.md](PROJECT-REVIEW-2026.md)** 📝 REVIEW
+   - Comprehensive architectural review
+   - Technical debt assessment
+   - SWOT analysis
+   - Strategic recommendations
+
+3. **[MODERNIZATION-AND-REFACTORING-GUIDE.md](MODERNIZATION-AND-REFACTORING-GUIDE.md)** 🚀 ROADMAP
+   - Strategic roadmap for modernization
+   - Transition to declarative engineering
+   - Containerized build pipeline
+   - dm-verity and verified boot
 
 4. **[ANALYSIS-AND-REVIEW.md](ANALYSIS-AND-REVIEW.md)** 📊 ANALYSIS
    - Complete project analysis
@@ -41,7 +56,31 @@ Read documents in this order:
    - Kernel optimization strategy
    - Future roadmap
 
-5. **[QUICK-REFERENCE.md](QUICK-REFERENCE.md)** 📖 QUICK REFERENCE
+6. **[RAM-MINIMIZATION-GUIDE.md](RAM-MINIMIZATION-GUIDE.md)** 🧠 RAM SAVING
+   - Strategy to reduce RAM usage from 250MB to <64MB
+   - Surgical kernel configurations
+   - Replacing udev with mdev
+   - Direct SquashFS mounting (avoiding copytoram)
+
+7. **[LOC-REDUCTION-PLAN.md](LOC-REDUCTION-PLAN.md)** 📉 CONSOLIDATION
+
+   - Strategy to reduce project LOC by ~50-70%
+   - Unified `qos` CLI design
+   - Declarative build migration
+   - Test suite unification
+
+6. **[OPTIMIZATION-AND-TUNING.md](OPTIMIZATION-AND-TUNING.md)** ⚡ TUNING
+   - Kernel parameters for low latency
+   - Resource management with EarlyOOM
+   - Filesystem and ZRAM tuning
+   - Silent boot configurations
+
+7. **[REFACTORING-SUMMARY.md](REFACTORING-SUMMARY.md)** ⭐ OVERVIEW
+   - Summary of recent refactoring work
+   - Metrics and results
+   - Current status of the distro
+
+8. **[QUICK-REFERENCE.md](QUICK-REFERENCE.md)** 📖 QUICK REFERENCE
    - Common commands
    - Service management
    - Troubleshooting commands
@@ -50,6 +89,55 @@ Read documents in this order:
 ---
 
 ## Document Purposes
+
+### MASTER-IMPLEMENTATION-PLAN.md
+**Purpose:** Actionable execution roadmap  
+**Read if:** You are ready to start implementing the changes  
+**Contains:**
+- Phased milestones for build, CLI, security, and tuning
+- Estimated LOC changes per phase
+- Immediate next action items
+
+### PROJECT-REVIEW-2026.md
+
+### LOC-REDUCTION-PLAN.md
+**Purpose:** Codebase consolidation strategy  
+**Read if:** You want to simplify the project and reduce technical debt  
+**Contains:**
+- Current vs. Target LOC breakdown
+- Plan for a unified `qos` management tool
+- Strategy for declarative build migration
+- Steps for test suite consolidation
+
+### OPTIMIZATION-AND-TUNING.md
+**Purpose:** Performance and resource tuning  
+**Read if:** You want to squeeze more performance or stability out of limited hardware  
+**Contains:**
+- Kernel boot parameter recommendations
+- EarlyOOM configuration for low-memory environments
+- Filesystem mount option optimizations
+- ZRAM and scheduler tuning
+
+### PROJECT-REVIEW-2026.md
+**Purpose:** Comprehensive current-state assessment  
+**Read if:** You want a deep dive into the system's maturity and technical debt  
+**Contains:**
+- Executive summary of system health
+- Architectural grades for core components
+- Detailed SWOT analysis
+- Strategic recommendations for long-term growth
+
+### MODERNIZATION-AND-REFACTORING-GUIDE.md
+**Purpose:** Strategic architectural roadmap  
+**Read if:** You want to evolve the distro towards industry best practices  
+**Contains:**
+- Vision for a "best-in-class" modern distro
+- Declarative engineering roadmap
+- Containerized build pipeline design
+- Modern image lifecycle (dm-verity, systemd-repart)
+- Unified service orchestration
+- Security hardening (Verified Boot)
+- Developer experience (qos CLI)
 
 ### REFACTORING-SUMMARY.md
 **Purpose:** Complete overview of what was done  

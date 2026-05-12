@@ -15,20 +15,38 @@ QEMU_IMAGE ?= dist/qos-x86_64.raw
 ROOT := $(shell pwd -P)
 KERNEL_IMAGE := $(ROOT)/build/kernel/arch/x86/boot/bzImage
 
-.PHONY: help full build-log build-grep kernel live qemu clean
+.PHONY: help full full-container manifest-gen manifest-diff ram-check build-log build-grep kernel live qemu clean
+
+QOS_PROFILE ?= server
 
 help:
 	@printf '%s\n' \
-		'full         - build the live ISO (reuses existing kernel if present)' \
-		'build-log    - run the full build and tee output to $(BUILD_LOG)' \
-		'build-grep   - grep interesting lines from $(BUILD_LOG)' \
-		'kernel       - rebuild the kernel explicitly' \
-		'live         - boot the live ISO in QEMU (run scripts/qemu-host-net-up.sh first for tap mode)' \
-		'qemu         - boot from the installed disk (run scripts/qemu-host-net-up.sh first for tap mode)' \
-		'clean        - remove build outputs'
+		'full            - build the live ISO (reuses existing kernel if present)' \
+		'full-container  - build inside a pinned Podman container (see Containerfile)' \
+		'manifest-gen    - generate package/service/layout files from config/qos.yaml' \
+		'manifest-diff   - diff generator output against the source-of-truth files' \
+		'ram-check       - boot ISO in QEMU and assert RAM usage <= profile budget' \
+		'build-log       - run the full build and tee output to $(BUILD_LOG)' \
+		'build-grep      - grep interesting lines from $(BUILD_LOG)' \
+		'kernel          - rebuild the kernel explicitly' \
+		'live            - boot the live ISO in QEMU (run scripts/qemu-host-net-up.sh first for tap mode)' \
+		'qemu            - boot from the installed disk (run scripts/qemu-host-net-up.sh first for tap mode)' \
+		'clean           - remove build outputs'
 
 full:
-	@BUILD_MOCK=$(BUILD_MOCK) BUILD_KERNEL_JOBS=$(BUILD_KERNEL_JOBS) BUILD_TOOL_JOBS=$(BUILD_TOOL_JOBS) DROPBEAR_AUTHORIZED_KEYS_FILE=$(DROPBEAR_AUTHORIZED_KEYS_FILE) bash build.sh
+	@QOS_PROFILE=$(QOS_PROFILE) BUILD_MOCK=$(BUILD_MOCK) BUILD_KERNEL_JOBS=$(BUILD_KERNEL_JOBS) BUILD_TOOL_JOBS=$(BUILD_TOOL_JOBS) DROPBEAR_AUTHORIZED_KEYS_FILE=$(DROPBEAR_AUTHORIZED_KEYS_FILE) bash build.sh
+
+full-container:
+	@QOS_PROFILE=$(QOS_PROFILE) BUILD_MOCK=$(BUILD_MOCK) BUILD_KERNEL_JOBS=$(BUILD_KERNEL_JOBS) BUILD_TOOL_JOBS=$(BUILD_TOOL_JOBS) DROPBEAR_AUTHORIZED_KEYS_FILE=$(DROPBEAR_AUTHORIZED_KEYS_FILE) bash scripts/build-in-container.sh
+
+ram-check:
+	@QOS_PROFILE=$(QOS_PROFILE) bash scripts/qos-ram-check.sh
+
+manifest-gen:
+	@bash scripts/qos-manifest.sh gen
+
+manifest-diff:
+	@bash scripts/qos-manifest.sh diff
 
 build-log:
 	@mkdir -p $(dir $(BUILD_LOG))
