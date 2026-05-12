@@ -26,11 +26,15 @@ trap cleanup EXIT INT TERM
 rootfs_dir="$stage_base/rootfs"
 
 ROOTFS_SKIP_APK=1 ROOTFS_DIR="$rootfs_dir" "$repo_root/scripts/build-rootfs.sh" >/dev/null
-ROOTFS_DIR="$rootfs_dir" "$repo_root/scripts/install-services.sh" >/dev/null
+QOS_BUILD_VERSION='QOS build: 2026-05-12 09:30:41 UTC (git deadbeef)' ROOTFS_DIR="$rootfs_dir" "$repo_root/scripts/install-services.sh" >/dev/null
 
 [[ -f "$rootfs_dir/etc/dropbear/dropbear.conf" ]] || die "missing dropbear config"
 [[ -f "$rootfs_dir/etc/cloud/cloud.cfg" ]] || die "missing base cloud-init config"
 ! [[ -f "$rootfs_dir/etc/cloud/cloud.cfg.d/05_qos-cloud-init.cfg" ]] || die "cloud-init drop-in must be removed in favor of base config"
+[[ -f "$rootfs_dir/etc/qos/version" ]] || die "missing qos build version file"
+grep -qxF 'QOS build: 2026-05-12 09:30:41 UTC (git deadbeef)' "$rootfs_dir/etc/qos/version" || die "qos version file must contain build timestamp"
+grep -qxF 'installed-disk' "$rootfs_dir/etc/qos/boot-source" || die "boot source must default to installed-disk"
+[[ -x "$rootfs_dir/etc/profile.d/qos-banner.sh" ]] || die "missing qos login banner hook"
 [[ -f "$rootfs_dir/etc/nftables/nftables.conf" ]] || die "missing nftables config"
 [[ -f "$rootfs_dir/etc/network/interfaces.dhcp" ]] || die "missing DHCP config"
 [[ -x "$rootfs_dir/etc/s6/service-tree/cloud-init-local/run" ]] || die "missing cloud-init local run script"
@@ -55,6 +59,7 @@ ROOTFS_DIR="$rootfs_dir" "$repo_root/scripts/install-services.sh" >/dev/null
 grep -qxF 'DROPBEAR_EXTRA_ARGS="-s -j -k"' "$rootfs_dir/etc/dropbear/dropbear.conf" || die "dropbear config is not key-only"
 grep -q '^datasource_list: \[ ConfigDrive, NoCloud, None \]$' "$rootfs_dir/etc/cloud/cloud.cfg" || die "cloud-init base config must set generic datasource order"
 ! grep -q '^datasource_list: .*Ec2' "$rootfs_dir/etc/cloud/cloud.cfg" || die "cloud-init base config must not probe EC2 on a generic image"
+grep -qxF 'QOS' "$rootfs_dir/etc/motd" || die "motd must be replaced with a QOS placeholder"
 grep -q 'cloud-init init --local' "$rootfs_dir/etc/s6/service-tree/cloud-init-local/run" || die "cloud-init local service must run init --local"
 grep -q 'cloud-init init' "$rootfs_dir/etc/s6/service-tree/cloud-init/run" || die "cloud-init service must run network stage"
 grep -q 'cloud-init modules --mode=config' "$rootfs_dir/etc/s6/service-tree/cloud-init/run" || die "cloud-init service must run config modules"
@@ -82,6 +87,38 @@ grep -q '/bin/busybox awk' "$rootfs_dir/etc/s6/service-tree/zram/run" || die "zr
 grep -q 'swapon' "$rootfs_dir/etc/s6/service-tree/zram/run" || die "zram service does not enable swap"
 grep -q 'table inet filter' "$rootfs_dir/etc/nftables/nftables.conf" || die "nftables config missing inet filter table"
 ! grep -q 'iptables' "$rootfs_dir/etc/nftables/nftables.conf" || die "nftables config must not mention iptables"
+
+banner_noninteractive="$stage_base/banner-noninteractive.out"
+banner_interactive="$stage_base/banner-interactive.out"
+cat > "$stage_base/meminfo" <<'EOF'
+MemTotal:        2097152 kB
+EOF
+cat > "$stage_base/uptime" <<'EOF'
+12345.67 54321.00
+EOF
+cat > "$stage_base/ip" <<'EOF'
+#!/bin/sh
+case "$*" in
+  *"-4 addr show scope global"*) printf '%s\n' '2: eth0    inet 162.141.92.102/24 brd 162.141.92.255 scope global eth0' ;;
+  *"-6 addr show scope global"*) printf '%s\n' '2: eth0    inet6 2001:db8::1234/64 scope global dynamic eth0' ;;
+esac
+EOF
+chmod 0755 "$stage_base/ip"
+cat > "$stage_base/boot-source-live" <<'EOF'
+live-cdrom
+EOF
+QOS_ROOTFS="$rootfs_dir" QOS_MEMINFO_FILE="$stage_base/meminfo" QOS_UPTIME_FILE="$stage_base/uptime" QOS_BOOT_SOURCE_FILE="$rootfs_dir/etc/qos/boot-source" QOS_DF_PATH="$stage_base" QOS_IP_BIN="$stage_base/ip" bash -c ". '$rootfs_dir/etc/profile.d/qos-banner.sh'" >"$banner_noninteractive"
+[[ ! -s "$banner_noninteractive" ]] || die "banner hook must stay quiet in noninteractive shells"
+QOS_BANNER_FORCE=1 QOS_ROOTFS="$rootfs_dir" QOS_MEMINFO_FILE="$stage_base/meminfo" QOS_UPTIME_FILE="$stage_base/uptime" QOS_BOOT_SOURCE_FILE="$stage_base/boot-source-live" QOS_DF_PATH="$stage_base" QOS_IP_BIN="$stage_base/ip" bash -c ". '$rootfs_dir/etc/profile.d/qos-banner.sh'" >"$banner_interactive"
+grep -q '^   ____   ___   ____  $' "$banner_interactive" || die "banner must include QOS art"
+grep -q '^QOS build: 2026-05-12 09:30:41 UTC (git deadbeef)$' "$banner_interactive" || die "banner must include build version"
+grep -q '^Boot: live CD-ROM$' "$banner_interactive" || die "banner must include boot source when live"
+grep -q '^Kernel: ' "$banner_interactive" || die "banner must include kernel version"
+grep -q '^Uptime: ' "$banner_interactive" || die "banner must include uptime"
+grep -q '^IPv4: 162.141.92.102/24$' "$banner_interactive" || die "banner must include IPv4"
+grep -q '^IPv6: 2001:db8::1234/64$' "$banner_interactive" || die "banner must include IPv6"
+grep -q '^RAM: ' "$banner_interactive" || die "banner must include RAM summary"
+grep -q '^Disk: ' "$banner_interactive" || die "banner must include disk summary"
 
 if find "$rootfs_dir/etc" -perm -u=w -print | grep -q .; then
   die "/etc should be hardened back to read-only after staging"

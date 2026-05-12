@@ -125,6 +125,8 @@ echo "[live-init] Live rootfs ready"
 
 echo "qos-live" > /sysroot/etc/hostname 2>/dev/null
 echo "qos-live" > /proc/sys/kernel/hostname 2>/dev/null
+mkdir -p /sysroot/etc/qos
+echo "live-cdrom" > /sysroot/etc/qos/boot-source
 
 echo "[live-init] Mounting essential filesystems..."
 mkdir -p /sysroot/proc /sysroot/sys /sysroot/dev /sysroot/run /sysroot/tmp

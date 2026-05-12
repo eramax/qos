@@ -44,6 +44,7 @@ if [[ -f "$etc_dir/shadow" ]]; then
 fi
 
 mkdir -p "$etc_dir/s6/service-tree" "$etc_dir/s6/s6-rc.d" "$etc_dir/dropbear" "$etc_dir/nftables" "$etc_dir/network" "$etc_dir/cloud/cloud.cfg.d"
+mkdir -p "$etc_dir/profile.d" "$etc_dir/qos"
 
 # Ensure /etc/qos and subdirectories are writable (created read-only in rootfs layout)
 chmod -R u+w "$etc_dir/qos" 2>/dev/null || mkdir -p "$etc_dir/qos"
@@ -74,12 +75,26 @@ if [[ -f "$etc_dir/cloud/cloud.cfg" ]]; then
   mv "$tmp_cloud_cfg" "$etc_dir/cloud/cloud.cfg"
 fi
 rm -f "$etc_dir/cloud/cloud.cfg.d/05_qos-cloud-init.cfg"
+if [[ -n "${QOS_BUILD_VERSION:-}" ]]; then
+  printf '%s\n' "$QOS_BUILD_VERSION" > "$etc_dir/qos/version"
+else
+  printf '%s\n' 'QOS build: unknown' > "$etc_dir/qos/version"
+fi
+chmod 0444 "$etc_dir/qos/version"
+printf '%s\n' 'installed-disk' > "$etc_dir/qos/boot-source"
+chmod 0444 "$etc_dir/qos/boot-source"
+
 install -m 0644 "$root/config/dropbear/dropbear.conf" "$etc_dir/dropbear/dropbear.conf"
+if [[ -f "$root/config/profile.d/qos-banner.sh" ]]; then
+  install -m 0755 "$root/config/profile.d/qos-banner.sh" "$etc_dir/profile.d/qos-banner.sh"
+fi
 if [[ -f "$dropbear_keys_file" ]]; then
   install -m 0600 "$dropbear_keys_file" "$rootfs/root/.ssh/authorized_keys"
 fi
 install -m 0644 "$root/config/nftables/nftables.conf" "$etc_dir/nftables/nftables.conf"
 install -m 0644 "$root/config/network/interfaces.dhcp" "$etc_dir/network/interfaces.dhcp"
+printf 'QOS\n' > "$etc_dir/motd"
+chmod 0444 "$etc_dir/motd"
 
 # Install capability profiles
 if [[ -d "$root/config/qos/capabilities/profiles" ]]; then

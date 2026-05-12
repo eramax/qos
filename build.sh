@@ -53,6 +53,15 @@ on_exit() {
 
 trap on_exit EXIT
 
+build_timestamp="$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+git_revision="$(git rev-parse --short HEAD 2>/dev/null || true)"
+qos_build_version="QOS build: $build_timestamp"
+if [[ -n "$git_revision" ]]; then
+  qos_build_version="$qos_build_version (git $git_revision)"
+fi
+export QOS_BUILD_VERSION="$qos_build_version"
+manifest_add "qos version: $QOS_BUILD_VERSION"
+
 cleanup_generated_outputs
 
 ensure_kernel_artifacts() {
