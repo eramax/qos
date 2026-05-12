@@ -47,9 +47,10 @@ while IFS= read -r applet; do
   fi
 
   ln -sfn busybox "$rootfs/bin/$applet"
-  ln -sfn busybox "$rootfs/sbin/$applet"
+ln -sfn busybox "$rootfs/sbin/$applet"
 done < <("$host_busybox" --list)
 ln -sfn /bin/busybox "$rootfs/sbin/busybox"
+ln -sfn /bin/busybox "$rootfs/usr/bin/env"
 ln -sfn ash "$rootfs/bin/sh"
 ln -sfn /usr/bin/s6-linux-init "$rootfs/sbin/init"
 

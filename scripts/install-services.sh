@@ -62,38 +62,6 @@ fi
 install -m 0644 "$root/config/nftables/nftables.conf" "$etc_dir/nftables/nftables.conf"
 install -m 0644 "$root/config/network/interfaces.dhcp" "$etc_dir/network/interfaces.dhcp"
 
-# Trim cloud-init's datasource payload to the set this image actually supports.
-# Alpine's cloud-init package brings every datasource module; pruning the unused
-# ones saves space in the live initramfs without baking provider-specific state
-# into the image.
-cloudinit_sources_dir="$(echo "$rootfs"/usr/lib/python*/site-packages/cloudinit/sources)"
-if [[ -d "$cloudinit_sources_dir" ]]; then
-  keep_cloudinit_sources=(
-    DataSourceNoCloud.py
-    DataSourceConfigDrive.py
-    DataSourceVultr.py
-    DataSourceOpenStack.py
-    DataSourceEc2.py
-    DataSourceVMware.py
-    DataSourceNone.py
-  )
-  for ds_path in "$cloudinit_sources_dir"/DataSource*.py; do
-    [[ -e "$ds_path" ]] || continue
-    keep=0
-    ds_name="${ds_path##*/}"
-    for allowed in "${keep_cloudinit_sources[@]}"; do
-      if [[ "$ds_name" == "$allowed" ]]; then
-        keep=1
-        break
-      fi
-    done
-    if [[ "$keep" -eq 0 ]]; then
-      rm -f "$ds_path"
-    fi
-  done
-  rm -rf "$cloudinit_sources_dir/__pycache__"
-fi
-
 # Install capability profiles
 if [[ -d "$root/config/qos/capabilities/profiles" ]]; then
   chmod u+w "$etc_dir/qos/capabilities" 2>/dev/null || true
@@ -115,6 +83,7 @@ fi
 
 # Install qos-capability and qos-cluster scripts
 chmod u+w "$rootfs/usr/bin" 2>/dev/null || true
+ln -sfn /bin/busybox "$rootfs/usr/bin/env"
 if [[ -f "$root/scripts/qos-capability.sh" ]]; then
   install -m 0755 "$root/scripts/qos-capability.sh" "$rootfs/usr/bin/qos-capability"
 fi
