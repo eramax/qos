@@ -90,15 +90,15 @@ cmd_profile() {
             new="${2:-}"
             [ -n "$new" ] || { printf 'usage: %s profile set <name>\n' "$PROG" >&2; exit 2; }
             case "$new" in
-                server|desktop|gaming|k8s) ;;
-                *) printf 'error: unknown profile: %s (expected server|desktop|gaming|k8s)\n' "$new" >&2; exit 2 ;;
+                server|desktop) ;;
+                *) printf 'error: unknown profile: %s (expected server|desktop)\n' "$new" >&2; exit 2 ;;
             esac
             mkdir -p "$(dirname "$PROFILE_FILE")"
             printf '%s\n' "$new" > "$PROFILE_FILE"
             printf 'profile set to %s (takes effect on next boot once profile overlays land)\n' "$new"
             ;;
         list)
-            printf 'server\ndesktop\ngaming\nk8s\n'
+            printf 'server\ndesktop\n'
             ;;
         *)
             printf 'usage: %s profile [current|set <name>|list]\n' "$PROG" >&2

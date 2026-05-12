@@ -22,11 +22,9 @@ ROOT="$(repo_root)"
 
 PROFILE="${QOS_PROFILE:-server}"
 case "$PROFILE" in
-    server)  BUDGET_KB="${QOS_RAM_BUDGET_KB:-65536}"  ;;  # 64MB
-    desktop) BUDGET_KB="${QOS_RAM_BUDGET_KB:-262144}" ;;  # 256MB
-    gaming)  BUDGET_KB="${QOS_RAM_BUDGET_KB:-524288}" ;;  # 512MB
-    k8s)     BUDGET_KB="${QOS_RAM_BUDGET_KB:-131072}" ;;  # 128MB
-    *) die "unknown profile: $PROFILE (server|desktop|gaming|k8s)" ;;
+    server)  BUDGET_KB="${QOS_RAM_BUDGET_KB:-131072}" ;;  # 128MB (k3s installed, off by default)
+    desktop) BUDGET_KB="${QOS_RAM_BUDGET_KB:-524288}" ;;  # 512MB (Wayland + Chromium + Steam)
+    *) die "unknown profile: $PROFILE (server|desktop)" ;;
 esac
 
 ISO="${QOS_ISO:-$ROOT/dist/qos-x86_64.iso}"

@@ -1,0 +1,9 @@
+#!/bin/sh
+# getty-tty1 (desktop overlay) — autologin root on tty1.
+#
+# Overrides the server profile's getty-tty1 (plain login prompt) so the
+# desktop boots straight into a logged-in shell. /etc/profile.d/qos-sway.sh
+# then exec's sway when the shell is interactive on tty1.
+
+set -eu
+exec /sbin/getty -n -l /bin/login -a root 115200 tty1

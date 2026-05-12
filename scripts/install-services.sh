@@ -66,6 +66,14 @@ fi
 if [[ -d "$overlay_dir/s6-rc.d" ]]; then
   cp -a "$overlay_dir/s6-rc.d/." "$etc_dir/s6/s6-rc.d/"
 fi
+# Profile may also ship /etc/profile.d snippets — e.g. desktop autostarts
+# sway on tty1 via config/s6/profile-overlays/desktop/profile.d/qos-sway.sh.
+if [[ -d "$overlay_dir/profile.d" ]]; then
+  for snippet in "$overlay_dir/profile.d"/*.sh; do
+    [[ -f "$snippet" ]] || continue
+    install -m 0755 "$snippet" "$etc_dir/profile.d/$(basename "$snippet")"
+  done
+fi
 mkdir -p "$etc_dir/qos"
 printf '%s\n' "$qos_profile" > "$etc_dir/qos/profile"
 if [[ -d "$root/config/cloud" ]]; then

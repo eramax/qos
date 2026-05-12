@@ -1,0 +1,31 @@
+#!/bin/sh
+# k3s-server — single-node k3s control plane + agent.
+#
+# Staged on the `server` profile but OFF by default. Operator enables it
+# by creating /etc/qos/k3s-enabled and restarting the service (or
+# rebooting). See `qos cluster enable` (when wired).
+
+set -eu
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+
+enabled_marker="/etc/qos/k3s-enabled"
+state_dir="/var/lib/rancher/k3s"
+
+if [ ! -f "$enabled_marker" ]; then
+    # Not enabled — park the service so s6 doesn't respawn-loop.
+    exec sleep 2147483647
+fi
+
+mkdir -p "$state_dir"
+
+if ! command -v k3s >/dev/null 2>&1; then
+    echo "k3s-server: k3s binary not installed" >&2
+    exec sleep 2147483647
+fi
+
+# --write-kubeconfig-mode=0644 so non-root operators can use `k9s`
+# without sudo. Tighten if this becomes multi-tenant.
+exec k3s server \
+    --data-dir "$state_dir" \
+    --write-kubeconfig-mode=0644 \
+    ${K3S_EXTRA_ARGS:-}

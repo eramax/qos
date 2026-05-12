@@ -28,18 +28,33 @@ BUILD_MANIFEST_FILE="$ROOT/build/build.manifest"
 : > "$BUILD_MANIFEST_FILE"
 manifest_add "command: $ROOT/build.sh BUILD_MOCK=${BUILD_MOCK:-1}"
 
+rootfs_cache_valid() {
+  # Returns 0 if the cached rootfs matches the current profile and was
+  # marked complete by build-rootfs.sh on its last successful run.
+  local marker="$ROOT/build/rootfs/.qos-cache-tag"
+  [[ -f "$marker" ]] || return 1
+  local cached_profile cached_status
+  cached_profile="$(awk -F= '$1=="profile"{print $2}' "$marker" 2>/dev/null || true)"
+  cached_status="$(awk -F= '$1=="status"{print $2}'  "$marker" 2>/dev/null || true)"
+  [[ "$cached_profile" == "${QOS_PROFILE:-server}" && "$cached_status" == "ok" ]]
+}
+
 cleanup_generated_outputs() {
+  local keep_rootfs=0
+  if [[ "${BUILD_FORCE_ROOTFS:-0}" != "1" ]] && rootfs_cache_valid; then
+    keep_rootfs=1
+  fi
   for path in \
-    "$ROOT/build/rootfs" \
     "$ROOT/build/initramfs" \
     "$ROOT/build/boot"
   do
     [[ -e "$path" ]] && chmod -R u+w "$path" 2>/dev/null || true
   done
-  rm -rf \
-    "$ROOT/build/rootfs" \
-    "$ROOT/build/initramfs" \
-    "$ROOT/build/boot"
+  if [[ "$keep_rootfs" != "1" ]]; then
+    [[ -e "$ROOT/build/rootfs" ]] && chmod -R u+w "$ROOT/build/rootfs" 2>/dev/null || true
+    rm -rf "$ROOT/build/rootfs"
+  fi
+  rm -rf "$ROOT/build/initramfs" "$ROOT/build/boot"
   rm -f "$ROOT"/dist/*.iso
 }
 

@@ -10,6 +10,7 @@ root="$(repo_root)"
 rootfs="${ROOTFS_DIR:-$root/build/rootfs}"
 cache_root="${ROOTFS_CACHE_DIR:-$root/build/cache/rootfs}"
 apk_arch="${APK_ARCH:-x86_64}"
+qos_profile="${QOS_PROFILE:-server}"
 repos_file="$root/config/apk/repositories"
 base_pkgs_file="$root/config/apk/packages.base"
 system_pkgs_file="$root/config/apk/packages.system"
@@ -17,6 +18,42 @@ system_pkgs_file="$root/config/apk/packages.system"
 [[ -f "$repos_file" ]] || die "missing repository manifest: $repos_file"
 [[ -f "$base_pkgs_file" ]] || die "missing base package manifest: $base_pkgs_file"
 [[ -f "$system_pkgs_file" ]] || die "missing system package manifest: $system_pkgs_file"
+
+# Cache check. The rootfs is the slowest part of the build (apk fetches +
+# extracts a lot). Reuse the previous rootfs if it was built for the same
+# profile and the marker shows the apk stage completed. Force a rebuild
+# with BUILD_FORCE_ROOTFS=1 or `make rootfs`.
+cache_marker="$rootfs/.qos-cache-tag"
+if [[ "${BUILD_FORCE_ROOTFS:-0}" != "1" && -f "$cache_marker" ]]; then
+  cached_profile="$(awk -F= '$1=="profile"{print $2}' "$cache_marker" 2>/dev/null || true)"
+  cached_status="$(awk -F= '$1=="status"{print $2}'  "$cache_marker" 2>/dev/null || true)"
+  if [[ "$cached_profile" == "$qos_profile" && "$cached_status" == "ok" ]]; then
+    manifest_add "rootfs: reused cached artifacts (profile=$qos_profile)"
+    echo "rootfs: reusing cache ($rootfs, profile=$qos_profile)"
+    # Layout may have changed even if packages didn't — re-apply it cheaply.
+    "$script_dir/apply-rootfs-layout.sh" "$rootfs"
+    exit 0
+  fi
+  echo "rootfs: cache miss (cached profile='$cached_profile' status='$cached_status' want='$qos_profile')"
+fi
+
+# Profile-specific extras come from config/qos.yaml via the manifest
+# helper. The base+system files remain the source-of-truth for the
+# `server` profile (and the manifest-diff check enforces they match
+# qos.yaml). For non-server profiles, we layer the extra packages on top.
+manifest_helper="$root/scripts/qos-manifest.sh"
+profile_extras=()
+if [[ "$qos_profile" != "server" && -x "$manifest_helper" ]]; then
+  # Pull the full resolved set for the profile, then subtract base+system
+  # so we add only the extras. Keeps order stable and dedupes.
+  mapfile -t profile_full < <("$manifest_helper" packages --profile "$qos_profile" 2>/dev/null || true)
+  mapfile -t profile_base < <(grep -vE '^\s*#|^\s*$' "$base_pkgs_file"; grep -vE '^\s*#|^\s*$' "$system_pkgs_file")
+  declare -A _seen=()
+  for p in "${profile_base[@]}"; do _seen[$p]=1; done
+  for p in "${profile_full[@]}"; do
+    [[ -z "${_seen[$p]:-}" ]] && profile_extras+=("$p") && _seen[$p]=1
+  done
+fi
 
 chmod -R u+w "$rootfs" 2>/dev/null || true
 rm -rf "$rootfs"
@@ -38,7 +75,11 @@ for repo in "${repos[@]}"; do
   repo_args+=("-X" "$repo")
 done
 
-pkg_args=("${base_pkgs[@]}" "${system_pkgs[@]}")
+pkg_args=("${base_pkgs[@]}" "${system_pkgs[@]}" "${profile_extras[@]}")
+manifest_add "profile: $qos_profile"
+if [[ "${#profile_extras[@]}" -gt 0 ]]; then
+  manifest_add "profile-extras: ${profile_extras[*]}"
+fi
 
 repo_index_url() {
   local repo="${1%/}"
@@ -121,5 +162,10 @@ fi
 fakeroot -- "$apk_static_path" --root "$rootfs" --initdb --usermode --arch "$apk_arch" "${repo_args[@]}" --keys-dir "$rootfs/etc/apk/keys" add --no-cache --no-scripts "${pkg_args[@]}"
 
 "$script_dir/apply-rootfs-layout.sh" "$rootfs"
+
+# Stamp the cache marker only after a successful build. cleanup hooks in
+# build.sh use the marker to decide whether to wipe the rootfs between
+# builds.
+printf 'profile=%s\nstatus=ok\n' "$qos_profile" > "$cache_marker"
 
 echo "rootfs staged under $rootfs"

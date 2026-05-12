@@ -133,6 +133,15 @@ case "$net_mode" in
     ;;
 esac
 
+# Display selection. Default is headless (no window) for server-style
+# boots; set QEMU_DISPLAY=gtk (or sdl/spice-app) to open a window.
+# Adding a VGA device is required for any display mode other than none.
+qemu_display="${QEMU_DISPLAY:-none}"
+qemu_display_args=(-display "$qemu_display")
+if [[ "$qemu_display" != "none" ]]; then
+  qemu_display_args+=(-device "${QEMU_VGA:-virtio-vga}")
+fi
+
 qemu_system_args=(
   -machine q35,accel=kvm:tcg
   -cpu max
@@ -146,7 +155,7 @@ qemu_system_args=(
   -device virtio-serial-pci
   -device virtserialport,chardev=qga,name=org.qemu.guest_agent.0
   "${qemu_serial_arg[@]}"
-  -display none
+  "${qemu_display_args[@]}"
 )
 
 # Boot from ISO or raw disk based on boot_disk setting
