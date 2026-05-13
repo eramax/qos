@@ -8,4 +8,14 @@ chmod 666 /run/seatd.sock 2>/dev/null || true
 chown root:video /dev/dri/card0 /dev/dri/renderD128 2>/dev/null || true
 chmod 660 /dev/dri/card0 /dev/dri/renderD128 2>/dev/null || true
 
+# Disable PS/2 mouse to avoid cursor offset (USB tablet is absolute)
+for dev in /sys/class/input/*/device/name; do
+  read name < "$dev" 2>/dev/null || continue
+  case "$name" in
+    *Explorer*Mouse*|*PS/2*Mouse*)
+      echo -n 0 > "${dev%/name}/../inhibited" 2>/dev/null || true
+      ;;
+  esac
+done
+
 exec sleep 2147483647

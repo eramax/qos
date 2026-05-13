@@ -9,7 +9,7 @@ riverctl map normal Super+Shift E exit
 
 riverctl map normal Super Return spawn foot
 riverctl map normal Super C spawn "chromium --ozone-platform=wayland --no-sandbox --test-type"
-riverctl map normal Super D spawn "foot -e /bin/sh"
+riverctl map normal Super S spawn "foot -e /bin/sh"
 
 riverctl map normal Super J focus-view next
 riverctl map normal Super K focus-view previous

@@ -172,6 +172,7 @@ qemu_system_args=(
   -device qemu-xhci
   -device usb-tablet
   "${qemu_serial_arg[@]}"
+  -device intel-hda -device hda-duplex
   "${qemu_display_args[@]}"
 )
 

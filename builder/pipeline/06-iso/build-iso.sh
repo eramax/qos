@@ -235,7 +235,7 @@ interface_branding_colour: 6
     protocol: linux
     kernel_path: boot():/vmlinuz
     module_path: boot():/initramfs-live.img
-    cmdline: rdinit=/init cloud-init=off video=Virtual-1:1920x1080@60 console=tty0 console=ttyS0,115200n8 earlycon=uart,io,0x3f8,115200n8 loglevel=7 net.ifnames=0 biosdevname=0
+    cmdline: rdinit=/init cloud-init=off video=Virtual-1:1920x1080@60 i8042.noaux console=tty0 console=ttyS0,115200n8 earlycon=uart,io,0x3f8,115200n8 loglevel=7 net.ifnames=0 biosdevname=0
 EOF
 mcopy -i "$esp_img" "$iso_build_dir/limine-live.conf" ::/limine.conf
 mcopy -i "$esp_img" "$boot_dir/vmlinuz"               ::/vmlinuz

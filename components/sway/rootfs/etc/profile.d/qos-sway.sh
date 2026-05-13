@@ -40,7 +40,6 @@ log "/dev/dri/card0 found"
 
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 export LIBSEAT_BACKEND="${LIBSEAT_BACKEND:-seatd}"
-export WLR_RENDERER=pixman
 export WLR_DRM_NO_MODIFIERS=1
 mkdir -p "$XDG_RUNTIME_DIR" 2>/dev/null || true
 chmod 0700 "$XDG_RUNTIME_DIR" 2>/dev/null || true

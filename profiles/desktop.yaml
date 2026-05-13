@@ -5,8 +5,10 @@ kernel:
     - components/gpu-open-source/kernel/drm-open.conf
     - components/gpu-open-source/kernel/input-evdev.conf
     - components/gpu-open-source/kernel/usb-tablet.conf
+    - components/gpu-open-source/kernel/sound.conf
+    - components/gpu-open-source/kernel/wayland-perf.conf
 qemu:
-  command: QOS_PROFILE=desktop QEMU_DISPLAY=gtk QEMU_VGA=virtio-gpu-pci QEMU_MEMORY=2G QEMU_CPUS=2 QEMU_NET_MODE=tap QEMU_BRIDGE_IFACE=br0 QEMU_HOSTFWD_PORT=2222 builder/tools/boot-image.sh --qemu-iso dist/qos-desktop.iso
+  command: QOS_PROFILE=desktop QEMU_DISPLAY=sdl QEMU_VGA=virtio-gpu-pci QEMU_MEMORY=4G QEMU_CPUS=4 QEMU_NET_MODE=tap QEMU_BRIDGE_IFACE=br0 QEMU_HOSTFWD_PORT=2222 builder/tools/boot-image.sh --qemu-iso dist/qos-desktop.iso
 components:
   - river
   - dbus
