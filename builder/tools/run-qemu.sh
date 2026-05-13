@@ -61,7 +61,15 @@ EOF
   exit 0
 fi
 
-require_cmd qemu-system-x86_64
+# Prefer locally-built QEMU, fall back to system QEMU
+qemu_bin="${root}/build/tools/qemu/bin/qemu-system-x86_64"
+if [[ ! -f "$qemu_bin" ]]; then
+  qemu_bin="qemu-system-x86_64"
+fi
+require_cmd "$qemu_bin"
+
+# Ensure KVM is available
+[[ -r /dev/kvm ]] || die "KVM not available: /dev/kvm not readable. Check: 1) kvm module loaded (lsmod | grep kvm), 2) user in kvm group (groups), 3) /dev/kvm permissions (ls -l /dev/kvm)"
 
 ovmf_code="${OVMF_CODE:-}"
 ovmf_vars="${OVMF_VARS:-}"
@@ -158,7 +166,7 @@ if [[ "$qemu_display" != "none" ]]; then
 fi
 
 qemu_system_args=(
-  -machine q35,accel=kvm:tcg
+  -machine q35,accel=kvm
   -cpu max
   -m "${QEMU_MEMORY:-1G}"
   -smp "${QEMU_CPUS:-2}"
@@ -214,5 +222,8 @@ echo "Booting: $boot_disk disk"
 if [[ -f "${QEMU_ISO:-}" ]]; then
   echo "  ISO: ${QEMU_ISO}"
 fi
+if [[ "$qemu_bin" != "qemu-system-x86_64" ]]; then
+  echo "  QEMU: Custom build at $qemu_bin"
+fi
 
-exec qemu-system-x86_64 "${qemu_system_args[@]}"
+exec "$qemu_bin" "${qemu_system_args[@]}"

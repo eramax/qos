@@ -106,6 +106,9 @@ build-grep:
 kernel:
 	@BUILD_KERNEL_JOBS=$(BUILD_KERNEL_JOBS) BUILD_TOOL_JOBS=$(BUILD_TOOL_JOBS) KERNEL_BUILD_DIR=$(ROOT)/build/kernel bash builder/pipeline/02-kernel/build-kernel.sh
 
+qemu-build:
+	@bash builder/tools/build-qemu.sh
+
 # Force-rebuild the rootfs for the current QOS_PROFILE. The full build
 # reuses this cache automatically on subsequent runs (same profile).
 rootfs:
