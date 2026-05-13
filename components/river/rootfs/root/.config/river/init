@@ -72,4 +72,16 @@ riverctl map-pointer normal Super BTN_MIDDLE toggle-float
 riverctl default-layout rivertile
 rivertile -view-padding 6 -outer-padding 6 >/dev/null 2>&1 &
 
-foot >/dev/null 2>&1 &
+chromium \
+  --ozone-platform=wayland \
+  --no-sandbox \
+  --test-type \
+  --enable-gpu-rasterization \
+  --enable-zero-copy \
+  --disable-background-timer-throttling \
+  --disable-breakpad \
+  --disable-default-apps \
+  --no-service-autorun \
+  >/dev/null 2>&1 &
+
+
