@@ -1,119 +1,139 @@
-#!/bin/bash
-# Create/recreate the qos VirtualBox VM.
-# Run from the project root directory.
-set -eu
+#!/usr/bin/env bash
+# create-vm.sh — Create QOS Desktop VirtualBox VM
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-VM_NAME="${VM_NAME:-qos}"
-VM_DIR="$SCRIPT_DIR/$VM_NAME"
+VM_NAME="qos"
+VM_DIR="$SCRIPT_DIR/qos"
+RAM_MB=8192
+CPUS=4
+VRAM_MB=128
+DISK_SIZE_MB=2048
 ISO_PATH="$PROJECT_ROOT/dist/qos-desktop.iso"
 SERIAL_LOG="$PROJECT_ROOT/build/screens/qos-serial.log"
+SSH_HOST_PORT=2222
+SSH_GUEST_PORT=22
 
-# Ensure serial log directory exists
-mkdir -p "$(dirname "$SERIAL_LOG")"
-
-# Stop and remove existing VM if present
+# ── Cleanup existing VM ──────────────────────────────────────────────────────
 if VBoxManage showvminfo "$VM_NAME" &>/dev/null; then
   echo "Removing existing VM '$VM_NAME'..."
   VBoxManage controlvm "$VM_NAME" poweroff 2>/dev/null || true
   sleep 2
   VBoxManage unregistervm "$VM_NAME" --delete 2>/dev/null || true
-  rm -rf "$VM_DIR"
 fi
-
+rm -rf "$VM_DIR"
 mkdir -p "$VM_DIR"
 
-# Create empty 2GB disk
-if [ ! -f "$VM_DIR/qos.vdi" ]; then
-  VBoxManage createmedium disk --filename "$VM_DIR/qos.vdi" --size 2048 --format VDI
-fi
-
-echo "Creating VM '$VM_NAME'..."
-
+# ── 1. Create and register the VM ─────────────────────────────────────────────
 VBoxManage createvm \
-  --name "$VM_NAME" \
-  --ostype "Linux26_64" \
+  --name        "$VM_NAME" \
+  --ostype      Linux_64 \
   --register \
-  --basefolder "$SCRIPT_DIR"
+  --basefolder  "$SCRIPT_DIR"
 
-# --- General ---
+# ── 2. Firmware (EFI), Chipset (PIIX3), base hardware ─────────────────────────
 VBoxManage modifyvm "$VM_NAME" \
-  --chipset piix3 \
-  --firmware efi \
-  --memory 8192 \
-  --vram 128 \
-  --cpus 4 \
-  --pae on \
-  --apic on \
-  --ioapic on \
-  --acpi on \
-  --rtcuseutc on \
-  --paravirtprovider kvm \
-  --hwvirtex on \
-  --nestedpaging on
-
-# --- Boot ---
-VBoxManage modifyvm "$VM_NAME" \
-  --boot1 dvd \
-  --boot2 disk
-
-# --- GPU ---
-VBoxManage modifyvm "$VM_NAME" \
+  --firmware        efi \
+  --chipset         piix3 \
+  --memory          "$RAM_MB" \
+  --cpus            "$CPUS" \
+  --vram            "$VRAM_MB" \
   --graphicscontroller vmsvga \
-  --accelerate3d on
+  --accelerate3d    on
 
-# --- Mouse / Keyboard ---
+# ── 3. Input devices ──────────────────────────────────────────────────────────
 VBoxManage modifyvm "$VM_NAME" \
-  --mouse usbtablet \
-  --keyboard ps2kbd \
-  --clipboard bidirectional \
-  --draganddrop bidirectional
+  --mouse    usbtablet \
+  --keyboard ps2
 
-# --- Audio ---
+# ── 4. Audio (Intel AC'97, output + input) ────────────────────────────────────
 VBoxManage modifyvm "$VM_NAME" \
-  --audio default \
-  --audioout on \
-  --audioin on
+  --audio-driver    default \
+  --audio-controller ac97 \
+  --audio-codec     ad1980 \
+  --audio-out       on \
+  --audio-in        on
 
-# --- USB ---
+# ── 5. Clipboard and drag-and-drop ────────────────────────────────────────────
 VBoxManage modifyvm "$VM_NAME" \
-  --usb on \
+  --clipboard-mode  bidirectional \
+  --drag-and-drop   bidirectional
+
+# ── 6. USB (EHCI / USB 2.0) ───────────────────────────────────────────────────
+VBoxManage modifyvm "$VM_NAME" \
+  --usb     on \
   --usbehci on
 
-# --- Network (NAT + SSH port forward on 2222) ---
+# ── 7. Network: NAT, virtio NIC, port-forward SSH ─────────────────────────────
 VBoxManage modifyvm "$VM_NAME" \
-  --nic1 nat \
-  --nictype1 virtio \
+  --nic1            nat \
+  --nictype1        virtio \
   --cableconnected1 on
 
 VBoxManage modifyvm "$VM_NAME" \
-  --natpf1 "ssh,tcp,,2222,,22"
+  --natpf1 "ssh,tcp,,${SSH_HOST_PORT},,${SSH_GUEST_PORT}"
 
-# --- Serial (redirect to log file) ---
+# ── 8. Serial port: UART1 at 0x3F8 / IRQ 4 → file ────────────────────────────
+mkdir -p "$(dirname "$SERIAL_LOG")"
 VBoxManage modifyvm "$VM_NAME" \
-  --uart1 0x3F8 4 \
+  --uart1    0x3F8 4 \
   --uartmode1 file "$SERIAL_LOG"
 
-# --- Storage ---
-VBoxManage storagectl "$VM_NAME" \
-  --name IDE --add ide --controller PIIX4 --bootable on
+# ── 9. Boot order: DVD first, then Disk ───────────────────────────────────────
+VBoxManage modifyvm "$VM_NAME" \
+  --boot1 dvd \
+  --boot2 disk \
+  --boot3 none \
+  --boot4 none
 
+# ── 10. CPU feature flags ─────────────────────────────────────────────────────
+VBoxManage modifyvm "$VM_NAME" \
+  --pae            on \
+  --apic           on \
+  --ioapic         on \
+  --acpi           on \
+  --rtcuseutc      on \
+  --hwvirtex       on \
+  --nestedpaging   on \
+  --paravirt-provider kvm
+
+# ── 11. Storage: IDE (DVD) ─────────────────────────────────────────────────────
 VBoxManage storagectl "$VM_NAME" \
-  --name SATA --add sata --controller IntelAhci --bootable on
+  --name       "IDE Controller" \
+  --add        ide \
+  --controller PIIX4
 
 VBoxManage storageattach "$VM_NAME" \
-  --storagectl IDE --port 0 --device 0 \
-  --type dvddrive --medium "$ISO_PATH"
+  --storagectl "IDE Controller" \
+  --port       0 \
+  --device     0 \
+  --type       dvddrive \
+  --medium     "$ISO_PATH"
+
+# ── 12. Storage: SATA (VDI disk) ──────────────────────────────────────────────
+VBoxManage storagectl "$VM_NAME" \
+  --name       "SATA Controller" \
+  --add        sata \
+  --controller IntelAhci
+
+VDI_PATH="$VM_DIR/qos.vdi"
+if [ ! -f "$VDI_PATH" ]; then
+  VBoxManage createmedium disk \
+    --filename "$VDI_PATH" \
+    --size     "$DISK_SIZE_MB" \
+    --format   VDI
+fi
 
 VBoxManage storageattach "$VM_NAME" \
-  --storagectl SATA --port 0 --device 0 \
-  --type hdd --medium "$VM_DIR/qos.vdi"
+  --storagectl "SATA Controller" \
+  --port       0 \
+  --device     0 \
+  --type       hdd \
+  --medium     "$VDI_PATH"
 
 echo ""
 echo "VM '$VM_NAME' created successfully."
-echo ""
-echo "Start:  VBoxManage startvm $VM_NAME --type gui"
-echo "SSH:    sshpass -p 'root' ssh -p 2222 root@localhost"
-echo "Stop:   VBoxManage controlvm $VM_NAME poweroff"
+echo "Start with:  VBoxManage startvm '$VM_NAME' --type gui"
+echo "SSH:         sshpass -p 'root' ssh -p $SSH_HOST_PORT root@localhost"
