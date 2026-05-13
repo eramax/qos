@@ -22,7 +22,7 @@ printf '%d\n' "$attempts" > "$retry_file"
 
 log "attempt $attempts/$max_attempts"
 
-for _mod in virtio_gpu amdgpu radeon i915 nouveau; do
+for _mod in vmwgfx virtio_gpu amdgpu radeon i915 nouveau; do
   modprobe "$_mod" 2>/dev/null || true
 done
 
@@ -53,6 +53,7 @@ export XDG_VTNR=1
 export LIBSEAT_BACKEND="${LIBSEAT_BACKEND:-seatd}"
 export WLR_DRM_NO_MODIFIERS=1
 export WLR_EGL_NO_MODIFIERS=1
+export WLR_RENDERER=pixman
 mkdir -p "$XDG_RUNTIME_DIR" 2>/dev/null || true
 chown "$(id -u):$(id -g)" "$XDG_RUNTIME_DIR" 2>/dev/null || true
 chmod 0700 "$XDG_RUNTIME_DIR" 2>/dev/null || true
