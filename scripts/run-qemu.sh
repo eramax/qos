@@ -115,15 +115,21 @@ fi
 
 case "$net_mode" in
   tap)
-    [[ -d "/sys/class/net/$bridge_iface/bridge" ]] || die "missing bridge interface: $bridge_iface"
-    qemu_tap_setup_script="$script_dir/qemu-tap.sh"
-    [[ -x "$qemu_tap_setup_script" ]] || die "missing tap helper: $qemu_tap_setup_script"
-    "$qemu_tap_setup_script" setup "$tap_iface" "$bridge_iface"
-    cleanup_tap() {
-      "$qemu_tap_setup_script" cleanup "$tap_iface" >/dev/null 2>&1 || true
-    }
-    trap cleanup_tap EXIT INT TERM
-    qemu_netdev_arg=(-netdev "tap,id=net0,ifname=${tap_iface},script=no,downscript=no")
+    if [[ ! -d "/sys/class/net/$bridge_iface/bridge" ]]; then
+      echo "WARNING: bridge $bridge_iface not found, falling back to NAT. Run 'sudo scripts/qemu-host-net-up.sh' for tap mode."
+      configure_nat_network
+    else
+      if ! "$script_dir/qemu-tap.sh" setup "$tap_iface" "$bridge_iface" 2>/dev/null; then
+        echo "WARNING: tap setup failed (sudo needed?), using NAT instead."
+        configure_nat_network
+      else
+        cleanup_tap() {
+          "$script_dir/qemu-tap.sh" cleanup "$tap_iface" >/dev/null 2>&1 || true
+        }
+        trap cleanup_tap EXIT INT TERM
+        qemu_netdev_arg=(-netdev "tap,id=net0,ifname=${tap_iface},script=no,downscript=no")
+      fi
+    fi
     ;;
   nat)
     configure_nat_network
@@ -135,11 +141,16 @@ esac
 
 # Display selection. Default is headless (no window) for server-style
 # boots; set QEMU_DISPLAY=gtk (or sdl/spice-app) to open a window.
-# Adding a VGA device is required for any display mode other than none.
 qemu_display="${QEMU_DISPLAY:-none}"
-qemu_display_args=(-display "$qemu_display")
+qemu_display_args=()
+qemu_vga="${QEMU_VGA:-virtio-vga}"
 if [[ "$qemu_display" != "none" ]]; then
-  qemu_display_args+=(-device "${QEMU_VGA:-virtio-vga}")
+  if [[ "$qemu_vga" == *gl* ]]; then
+    qemu_display_args=(-vga none -display "$qemu_display,gl=on" \
+      -device "$qemu_vga,xres=1280,yres=800,blob=on,hostmem=256M")
+  else
+    qemu_display_args=(-display "$qemu_display" -device "$qemu_vga")
+  fi
 fi
 
 qemu_system_args=(
@@ -168,16 +179,16 @@ if [[ "$boot_disk" == "installed" ]]; then
     -device virtio-blk-pci,drive=extradisk,bootindex=0
   )
 elif [[ -f "${QEMU_ISO:-}" ]]; then
-  # Boot from ISO (live CD) via virtio-scsi.
-  # Using virtio-scsi instead of IDE/AHCI because the AHCI driver is built
-  # as a module (=m) in this kernel, whereas CONFIG_SCSI_VIRTIO=y and
-  # CONFIG_BLK_DEV_SR=y are built-in.  The CDROM appears as /dev/sr0 in
-  # the guest.  The extra disk is the install target (/dev/vda).
+  # Boot from ISO (live CD) via virtio-scsi for firmware boot, and also
+  # attach the same ISO file as a read-only virtio-blk disk so Linux can
+  # mount it reliably as a normal block device during live-init.
   qemu_system_args=(
     "${qemu_system_args[@]}"
     -device virtio-scsi-pci,id=scsi0
     -drive if=none,file="${QEMU_ISO}",media=cdrom,id=iso0
     -device scsi-cd,bus=scsi0.0,drive=iso0,bootindex=0
+    -drive if=none,file="${QEMU_ISO}",format=raw,readonly=on,id=isoblk
+    -device virtio-blk-pci,drive=isoblk
     -drive if=none,file="$extra_disk",format=raw,id=extradisk
     -device virtio-blk-pci,drive=extradisk,bootindex=1
   )

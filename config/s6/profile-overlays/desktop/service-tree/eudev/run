@@ -1,0 +1,14 @@
+#!/bin/sh
+set -eu
+
+mkdir -p /run/udev
+
+# eudev: device event manager (replaces systemd-udevd).
+udevd_bin=""
+for candidate in /usr/sbin/udevd /sbin/udevd /usr/bin/udevd; do
+  [ -x "$candidate" ] && udevd_bin="$candidate" && break
+done
+
+[ -n "$udevd_bin" ] || { echo "eudev: udevd not found" >&2; exit 1; }
+
+exec "$udevd_bin"

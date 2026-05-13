@@ -6,4 +6,4 @@
 # then exec's sway when the shell is interactive on tty1.
 
 set -eu
-exec /sbin/getty -n -l /bin/login -a root 115200 tty1
+exec /sbin/getty -n -l /usr/bin/qos-autologin-root 115200 tty1

@@ -1,6 +1,7 @@
 # Rootfs path layout for the immutable image.
 /bin
 /dev
+/dev/pts
 /etc
 /etc/apk
 /etc/apk/keys

@@ -17,6 +17,9 @@ host_busybox="$(command -v busybox || true)"
 
 mkdir -p "$rootfs"
 
+# Make writable for the layout staging pass (rootfs may be read-only from cache).
+chmod -R u+w "$rootfs/bin" "$rootfs/sbin" "$rootfs/etc" "$rootfs/usr" 2>/dev/null || true
+
 perm_for_path() {
   case "$1" in
     /run|/var|/var/lib|/var/log) echo 0755 ;;
@@ -46,13 +49,13 @@ while IFS= read -r applet; do
     continue
   fi
 
-  ln -sfn busybox "$rootfs/bin/$applet"
-ln -sfn busybox "$rootfs/sbin/$applet"
+  ln -sf busybox "$rootfs/bin/$applet"
+  ln -sf busybox "$rootfs/sbin/$applet"
 done < <("$host_busybox" --list)
-ln -sfn /bin/busybox "$rootfs/sbin/busybox"
-ln -sfn /bin/busybox "$rootfs/usr/bin/env"
-ln -sfn ash "$rootfs/bin/sh"
-ln -sfn /usr/bin/s6-linux-init "$rootfs/sbin/init"
+ln -sf /bin/busybox "$rootfs/sbin/busybox"
+ln -sf /bin/busybox "$rootfs/usr/bin/env"
+ln -sf ash "$rootfs/bin/sh"
+ln -sf /usr/bin/s6-linux-init "$rootfs/sbin/init"
 
 mkdir -p "$rootfs/etc/qos"
 install -m 0644 "$root/config/image/slots.json" "$rootfs/etc/qos/slots.json"

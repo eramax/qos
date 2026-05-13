@@ -10,6 +10,29 @@ root="$(repo_root)"
 kernel_config="${KERNEL_CONFIG:-$root/config/kernel/x86_64.config}"
 kernel_build_dir="${KERNEL_BUILD_DIR:-$root/build/kernel}"
 kernel_version_file="${KERNEL_VERSION_FILE:-$root/config/kernel/version}"
+# Cache hit: bzImage exists and config hasn't changed since the last
+# successful build.  Reuse the artifacts and skip the full build.
+kernel_out="$kernel_build_dir/build"
+kernel_out_cache="$kernel_out/.qos-kernel-cache-tag"
+kernel_config_hash="$(sha256sum "$kernel_config" | awk '{print $1}')"
+if [[ -f "$kernel_out/arch/x86/boot/bzImage" && -f "$kernel_out_cache" ]]; then
+  cached_hash="$(awk -F= '$1=="config_hash"{print $2}' "$kernel_out_cache" 2>/dev/null || true)"
+  if [[ "$cached_hash" == "$kernel_config_hash" ]]; then
+    manifest_add "kernel: reused cached build (config unchanged)"
+    echo "kernel: reusing cache ($kernel_out)"
+    cp "$kernel_out/arch/x86/boot/bzImage" "$kernel_build_dir/vmlinuz"
+    cp "$kernel_out/System.map" "$kernel_build_dir/System.map"
+    if [[ ! -d "$kernel_build_dir/modules/lib/modules" ]]; then
+      echo "kernel: WARNING: modules missing from cache, forcing rebuild"
+    else
+      echo "kernel build complete (cached): $kernel_build_dir/vmlinuz"
+      exit 0
+    fi
+  else
+    echo "kernel: config changed, rebuilding ($cached_hash -> $kernel_config_hash)"
+  fi
+fi
+
 cache_root="${KERNEL_CACHE_DIR:-$root/build/cache/kernel}"
 kernel_version="${KERNEL_VERSION:-}"
 tool_root="$cache_root/tooling"
@@ -83,7 +106,6 @@ fi
 manifest_add "command: scripts/build-kernel.sh version=$kernel_version"
 
 # Determine source: git tag (RC) or tarball (stable)
-kernel_out="$kernel_build_dir/build"
 kernel_src="$cache_root/linux-$kernel_version"
 
 if [[ "$kernel_version" == *-rc* ]]; then
@@ -129,9 +151,19 @@ cp "$kernel_config" "$kernel_out/.config"
 PATH="$tool_prefix/bin:$PATH" "$kernel_src/scripts/kconfig/merge_config.sh" -m -O "$kernel_out" "$kernel_config" >/dev/null
 
 PATH="$tool_prefix/bin:$PATH" make -C "$kernel_src" O="$kernel_out" olddefconfig >/dev/null
-PATH="$tool_prefix/bin:$PATH" make -C "$kernel_src" O="$kernel_out" -j"${BUILD_KERNEL_JOBS:-1}" bzImage >/dev/null
+PATH="$tool_prefix/bin:$PATH" make -C "$kernel_src" O="$kernel_out" -j"${BUILD_KERNEL_JOBS:-1}" bzImage modules >/dev/null
 
 cp "$kernel_out/arch/x86/boot/bzImage" "$kernel_build_dir/vmlinuz"
 cp "$kernel_out/System.map" "$kernel_build_dir/System.map"
+
+# Install kernel modules into a staging directory so build-rootfs.sh can
+# copy them into the rootfs.  Strips debug info to save space.
+modules_stage="$kernel_build_dir/modules"
+rm -rf "$modules_stage"
+PATH="$tool_prefix/bin:$PATH" make -C "$kernel_src" O="$kernel_out" INSTALL_MOD_PATH="$modules_stage" INSTALL_MOD_STRIP=1 modules_install >/dev/null
+
+# Record the config hash so subsequent builds can skip a rebuild when the
+# config hasn't changed.
+printf 'config_hash=%s\n' "$kernel_config_hash" > "$kernel_out_cache"
 
 echo "kernel build complete: $kernel_build_dir/vmlinuz"

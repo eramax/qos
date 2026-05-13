@@ -1,0 +1,20 @@
+#!/bin/sh
+set -eu
+
+SEATD_BIN="${SEATD_BIN:-}"
+if [ -z "$SEATD_BIN" ]; then
+    for candidate in /usr/bin/seatd /usr/sbin/seatd /bin/seatd /sbin/seatd; do
+        if [ -x "$candidate" ]; then
+            SEATD_BIN="$candidate"
+            break
+        fi
+    done
+fi
+
+[ -n "$SEATD_BIN" ] || {
+    echo "seatd: binary not found" >&2
+    exit 1
+}
+
+mkdir -p /run
+exec "$SEATD_BIN" -l info

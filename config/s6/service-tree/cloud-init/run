@@ -9,6 +9,11 @@ final_done="$state_dir/cloud-init.done"
 
 mkdir -p "$state_dir"
 
+if [ -f /etc/cloud-init.disabled ] || grep -q 'cloud-init=off' /proc/cmdline 2>/dev/null; then
+    : > "$final_done"
+    exec sleep 2147483647
+fi
+
 if ! command -v cloud-init >/dev/null 2>&1; then
     : > "$final_done"
     exec sleep 2147483647

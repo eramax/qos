@@ -28,7 +28,7 @@ NODE_CPU="$(nproc 2>/dev/null || echo 1)"
 NODE_RAM="$(grep MemTotal /proc/meminfo 2>/dev/null | awk '{print $2 * 1024}' || echo 0)"
 
 log() {
-    echo "[$(date -Iseconds)] $*" >> "$CLUSTER_LOG/cluster.log"
+    echo "[$(date -u '+%Y-%m-%dT%H:%M:%SZ')] $*" >> "$CLUSTER_LOG/cluster.log"
 }
 
 log "Starting QOS Cluster Daemon"
@@ -54,7 +54,7 @@ broadcast_presence() {
     
     # Get current resource usage
     local cpu_usage mem_usage disk_usage
-    cpu_usage="$(top -bn1 2>/dev/null | grep 'Cpu(s)' | awk '{print $2}' || echo 0)"
+    cpu_usage="$(awk '{print $1}' /proc/loadavg 2>/dev/null || echo 0)"
     mem_usage="$(grep -E '^(MemTotal|MemAvailable):' /proc/meminfo 2>/dev/null | awk '{print $2}' | paste -sd' ' || echo '0 0')"
     disk_usage="$(df /var 2>/dev/null | tail -1 | awk '{print $5}' | tr -d '%' || echo 0)"
     

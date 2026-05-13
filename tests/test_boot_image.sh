@@ -13,6 +13,15 @@ repo_root="$(cd "$here/.." && pwd -P)"
 for script in scripts/boot-image.sh scripts/run-qemu.sh scripts/assemble-image.sh scripts/build-rootfs.sh; do
   [[ -x "$repo_root/$script" ]] || die "missing $script"
 done
+grep -q 'exec switch_root /sysroot /sbin/init' "$repo_root/scripts/build-iso.sh" || die "live init must switch_root into the live rootfs"
+grep -q 'rdinit=/init' "$repo_root/scripts/build-iso.sh" || die "live kernel cmdline must force rdinit=/init"
+grep -q 'host_busybox="/usr/bin/busybox"' "$repo_root/scripts/build-iso.sh" || die "live initramfs must source a host busybox binary"
+grep -q 'cp "$host_busybox" "$live_stage/bin/busybox"' "$repo_root/scripts/build-iso.sh" || die "live initramfs must use host static busybox for early boot"
+grep -q 'mksquashfs "$rootfs" "$rootfs_sfs"' "$repo_root/scripts/build-iso.sh" || die "live ISO build must generate rootfs.sfs"
+grep -q '#!/bin/busybox sh' "$repo_root/scripts/build-iso.sh" || die "live /init must use the static busybox interpreter directly"
+grep -q 'rootfs.sfs' "$repo_root/scripts/build-iso.sh" || die "live ISO builder must depend on rootfs.sfs discovery at boot"
+! grep -q '/dev/sr0' "$repo_root/scripts/build-iso.sh" || die "live ISO builder must not depend on sr0 appearing in the guest"
+grep -q '99-qos-live-disable.cfg' "$repo_root/scripts/build-iso.sh" || die "live init must disable cloud-init"
 
 stage_base="$(mktemp -d "$repo_root/build/task-boot.XXXXXX")"
 cleanup() {

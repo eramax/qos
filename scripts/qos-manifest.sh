@@ -224,6 +224,9 @@ def walk(name, trail):
     if parent:
         walk(parent, trail + [name])
     emit(p.get("packages", []))
+    # GPU firmware packages are regular apk packages installed alongside
+    # the profile's user-space stack (mesa, vulkan-icds, etc.).
+    emit(p.get("gpu", {}).get("firmware", []))
 walk(want, [])
 
 for pkg in out:

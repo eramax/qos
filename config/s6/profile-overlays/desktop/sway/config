@@ -1,0 +1,10 @@
+# QOS Desktop - Sway config
+
+# Bar with static status
+bar {
+    position bottom
+    status_command echo " QOS Desktop "
+}
+
+# Launch terminal
+exec foot

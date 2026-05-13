@@ -8,6 +8,11 @@ done_marker="$state_dir/cloud-init-local.done"
 
 mkdir -p "$state_dir"
 
+if [ -f /etc/cloud-init.disabled ] || grep -q 'cloud-init=off' /proc/cmdline 2>/dev/null; then
+    : > "$done_marker"
+    exec sleep 2147483647
+fi
+
 if ! command -v cloud-init >/dev/null 2>&1; then
     : > "$done_marker"
     exec sleep 2147483647

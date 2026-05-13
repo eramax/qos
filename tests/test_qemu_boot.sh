@@ -31,6 +31,7 @@ grep -q "'qemu         - boot from the installed disk" "$repo_root/Makefile" || 
 grep -q "scripts/qemu-host-net-up.sh first" "$repo_root/Makefile" || die "make help must mention qemu-host-net-up.sh prerequisite"
 ! grep -q "'qemu2" "$repo_root/Makefile" || die "make help must not advertise qemu2"
 ! grep -q "'boot         -" "$repo_root/Makefile" || die "make help must not advertise boot"
+grep -q 'readonly=on,id=isoblk' "$repo_root/scripts/run-qemu.sh" || die "ISO boot must attach a read-only runtime block copy of the ISO"
 [[ -x "$repo_root/scripts/qemu-tap.sh" ]] || die "missing qemu tap helper"
 
 stage_base="$(mktemp -d "$repo_root/build/task7-qemu.XXXXXX")"

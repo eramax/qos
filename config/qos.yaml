@@ -150,13 +150,17 @@ profiles:
       - mesa-vulkan-intel
       - pipewire
       - pipewire-pulse
+      - seatd
       - eudev
       - flatpak                # Steam ships via flathub
       # gamemode: not in Alpine main/community as of 3.23 — install
       # post-boot from edge/testing or skip; not a hard dep for boot.
     services:
+      - seatd
       - eudev
       - pipewire
+      - xwayland
+      - swaybg
     overlays:
       - lib32                  # 32-bit libs for Proton/Steam, in own overlay
     # Open-source stack only. NVIDIA proprietary is a separate overlay
@@ -173,5 +177,4 @@ profiles:
         - linux-firmware-amdgpu
         - linux-firmware-radeon
         - linux-firmware-i915
-        - linux-firmware-nouveau
     ram_budget_kb: 524288      # 512 MB

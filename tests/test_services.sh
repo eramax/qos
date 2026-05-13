@@ -24,9 +24,14 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 rootfs_dir="$stage_base/rootfs"
+desktop_rootfs_dir="$stage_base/rootfs-desktop"
 
 ROOTFS_SKIP_APK=1 ROOTFS_DIR="$rootfs_dir" "$repo_root/scripts/build-rootfs.sh" >/dev/null
 QOS_BUILD_VERSION='QOS build: 2026-05-12 09:30:41 UTC (git deadbeef)' ROOTFS_DIR="$rootfs_dir" "$repo_root/scripts/install-services.sh" >/dev/null
+QOS_BUILD_VERSION='QOS build: 2026-05-12 09:30:41 UTC (git deadbeef)' ROOTFS_DIR="$rootfs_dir" "$repo_root/scripts/install-services.sh" >/dev/null
+
+ROOTFS_SKIP_APK=1 ROOTFS_DIR="$desktop_rootfs_dir" "$repo_root/scripts/build-rootfs.sh" >/dev/null
+QOS_PROFILE=desktop QOS_BUILD_VERSION='QOS build: 2026-05-12 09:30:41 UTC (git deadbeef)' ROOTFS_DIR="$desktop_rootfs_dir" "$repo_root/scripts/install-services.sh" >/dev/null
 
 [[ -f "$rootfs_dir/etc/dropbear/dropbear.conf" ]] || die "missing dropbear config"
 [[ -f "$rootfs_dir/etc/cloud/cloud.cfg" ]] || die "missing base cloud-init config"
@@ -71,7 +76,13 @@ grep -q 'cloud-init-local.done' "$rootfs_dir/etc/s6/service-tree/networking/run"
 grep -q '/sbin/ifup -a' "$rootfs_dir/etc/s6/service-tree/networking/run" || die "networking service must apply cloud-init-rendered network config"
 grep -q '/bin/busybox udhcpc' "$rootfs_dir/etc/s6/service-tree/networking/run" || die "networking service must retain DHCP fallback"
 grep -q '/sbin/getty 115200 ttyS0' "$rootfs_dir/etc/s6/service-tree/getty/run" || die "serial getty must stay on ttyS0"
-grep -q '/sbin/getty 115200 tty1' "$rootfs_dir/etc/s6/service-tree/getty-tty1/run" || die "VGA getty must run on tty1"
+grep -q 'tty1' "$rootfs_dir/etc/s6/service-tree/getty-tty1/run" || die "VGA getty must run on tty1"
+[[ -x "$desktop_rootfs_dir/usr/bin/qos-autologin-root" ]] || die "missing desktop autologin wrapper"
+grep -q 'exec /bin/login -f root' "$desktop_rootfs_dir/usr/bin/qos-autologin-root" || die "desktop autologin wrapper must use login -f root"
+grep -q '/usr/bin/qos-autologin-root' "$desktop_rootfs_dir/etc/s6/service-tree/getty-tty1/run" || die "desktop tty1 getty must use the autologin wrapper"
+[[ -x "$desktop_rootfs_dir/etc/s6/service-tree/seatd/run" ]] || die "missing desktop seatd service"
+grep -q 'seatd' "$desktop_rootfs_dir/etc/s6/service-tree/seatd/run" || die "desktop seatd service must launch seatd"
+grep -q 'LIBSEAT_BACKEND="${LIBSEAT_BACKEND:-seatd}"' "$desktop_rootfs_dir/etc/profile.d/qos-sway.sh" || die "desktop sway autostart must default libseat to seatd"
 grep -q '/usr/sbin/dropbear -R -F -E' "$rootfs_dir/etc/s6/service-tree/dropbear/run" || die "dropbear service not foregrounded"
 grep -q '/usr/sbin/nft -f /etc/nftables/nftables.conf' "$rootfs_dir/etc/s6/service-tree/nftables/run" || die "nftables service does not load the firewall rules"
 grep -q '/sys/class/zram-control/hot_add' "$rootfs_dir/etc/s6/service-tree/zram/run" || die "zram service does not create a zram device"

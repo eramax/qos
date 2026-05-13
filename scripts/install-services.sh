@@ -17,6 +17,11 @@ etc_dir="$rootfs/etc"
 
 chmod u+w "$etc_dir"
 chmod u+w "$rootfs/root"
+chmod -R u+w "$etc_dir" 2>/dev/null || true
+chmod -R u+w "$rootfs/usr/bin" 2>/dev/null || true
+chmod -R u+w "$rootfs/usr/lib" 2>/dev/null || true
+chmod -R u+w "$rootfs/usr/share" 2>/dev/null || true
+chmod -R u+w "$rootfs/sbin" 2>/dev/null || true
 
 # Set hostname.
 printf 'qos\n' > "$etc_dir/hostname"
@@ -53,6 +58,8 @@ mkdir -p "$rootfs/root/.ssh"
 
 cp -a "$root/config/s6/service-tree/." "$etc_dir/s6/service-tree/"
 cp -a "$root/config/s6/s6-rc.d/." "$etc_dir/s6/s6-rc.d/"
+find "$etc_dir/s6/service-tree" -type f -name run -exec chmod 0755 {} \;
+find "$etc_dir/s6/s6-rc.d" -type f -name run -exec chmod 0755 {} \;
 
 # Profile-aware service overlay. QOS_PROFILE selects which extra service
 # templates from config/s6/profile-overlays/<profile>/ get staged. Default
@@ -62,9 +69,11 @@ qos_profile="${QOS_PROFILE:-server}"
 overlay_dir="$root/config/s6/profile-overlays/$qos_profile"
 if [[ -d "$overlay_dir/service-tree" ]]; then
   cp -a "$overlay_dir/service-tree/." "$etc_dir/s6/service-tree/"
+  find "$etc_dir/s6/service-tree" -type f -name run -exec chmod 0755 {} \;
 fi
 if [[ -d "$overlay_dir/s6-rc.d" ]]; then
   cp -a "$overlay_dir/s6-rc.d/." "$etc_dir/s6/s6-rc.d/"
+  find "$etc_dir/s6/s6-rc.d" -type f -name run -exec chmod 0755 {} \;
 fi
 # Profile may also ship /etc/profile.d snippets — e.g. desktop autostarts
 # sway on tty1 via config/s6/profile-overlays/desktop/profile.d/qos-sway.sh.
@@ -73,6 +82,11 @@ if [[ -d "$overlay_dir/profile.d" ]]; then
     [[ -f "$snippet" ]] || continue
     install -m 0755 "$snippet" "$etc_dir/profile.d/$(basename "$snippet")"
   done
+fi
+# Profile may ship a sway config — install under /etc/sway.
+if [[ -d "$overlay_dir/sway" ]]; then
+  mkdir -p "$etc_dir/sway"
+  cp -a "$overlay_dir/sway/." "$etc_dir/sway/"
 fi
 mkdir -p "$etc_dir/qos"
 printf '%s\n' "$qos_profile" > "$etc_dir/qos/profile"
@@ -161,6 +175,9 @@ if [[ -f "$root/scripts/qos-e2e-full.sh" ]]; then
 fi
 if [[ -f "$root/scripts/qos.sh" ]]; then
   install -m 0755 "$root/scripts/qos.sh" "$rootfs/usr/bin/qos"
+fi
+if [[ -f "$root/scripts/qos-autologin-root.sh" ]]; then
+  install -m 0755 "$root/scripts/qos-autologin-root.sh" "$rootfs/usr/bin/qos-autologin-root"
 fi
 if [[ -f "$root/scripts/qos-manifest.sh" ]]; then
   install -m 0755 "$root/scripts/qos-manifest.sh" "$rootfs/usr/bin/qos-manifest"
@@ -280,10 +297,10 @@ EOF
 
   chmod u+w "$rootfs/sbin"
   rm -f "$rootfs/sbin/init"
-  ln -s /etc/s6-linux-init/current/bin/init "$rootfs/sbin/init"
+  ln -sfn /etc/s6-linux-init/current/bin/init "$rootfs/sbin/init"
   for helper in halt poweroff reboot shutdown telinit; do
     rm -f "$rootfs/sbin/$helper"
-    ln -s "/etc/s6-linux-init/current/bin/$helper" "$rootfs/sbin/$helper"
+    ln -sfn "/etc/s6-linux-init/current/bin/$helper" "$rootfs/sbin/$helper"
   done
   chmod a-w "$rootfs/sbin"
 else

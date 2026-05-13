@@ -1,0 +1,10 @@
+#!/bin/sh
+set -eu
+
+# pipewire: audio/video stream manager.
+# Run as root for the live CD autologin session. A multi-user setup
+# would run this per-user via the session bus.
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+mkdir -p "$XDG_RUNTIME_DIR"
+
+exec /usr/bin/pipewire

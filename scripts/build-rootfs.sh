@@ -163,6 +163,29 @@ fakeroot -- "$apk_static_path" --root "$rootfs" --initdb --usermode --arch "$apk
 
 "$script_dir/apply-rootfs-layout.sh" "$rootfs"
 
+# Install kernel modules into the rootfs. The kernel build stages them
+# under build/kernel/modules/lib/modules/<version>/.
+kernel_build_dir="${KERNEL_BUILD_DIR:-$root/build/kernel}"
+modules_stage="$kernel_build_dir/modules"
+if [[ -d "$modules_stage/lib/modules" ]]; then
+  kver="$(ls "$modules_stage/lib/modules/")"
+  if [[ -n "$kver" ]]; then
+    chmod -R u+w "$rootfs/lib" 2>/dev/null || true
+    mkdir -p "$rootfs/lib/modules"
+    chmod -R u+w "$rootfs/lib/modules" 2>/dev/null || true
+    cp -a "$modules_stage/lib/modules/$kver" "$rootfs/lib/modules/$kver"
+    # Remove the build and source symlinks — they point at the host tree.
+    rm -f "$rootfs/lib/modules/$kver/build" "$rootfs/lib/modules/$kver/source"
+    # Generate modules.dep so modprobe works without depmod at runtime.
+    if command -v depmod >/dev/null 2>&1; then
+      depmod -b "$rootfs" "$kver" 2>/dev/null || true
+    elif command -v busybox >/dev/null 2>&1; then
+      busybox depmod -b "$rootfs" "$kver" 2>/dev/null || true
+    fi
+    echo "kernel modules installed: $kver"
+  fi
+fi
+
 # Stamp the cache marker only after a successful build. cleanup hooks in
 # build.sh use the marker to decide whether to wipe the rootfs between
 # builds.

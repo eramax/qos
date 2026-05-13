@@ -81,14 +81,6 @@ cleanup_generated_outputs
 
 ensure_kernel_artifacts() {
   local kernel_dir="$ROOT/build/kernel"
-  local kernel_image="$kernel_dir/build/arch/x86/boot/bzImage"
-
-  if [[ -f "$kernel_image" ]]; then
-    manifest_add "kernel: reused existing artifacts"
-    return 0
-  fi
-
-  manifest_add "kernel: rebuilt because artifacts were missing"
   KERNEL_BUILD_DIR="$kernel_dir" "$script_dir/scripts/build-kernel.sh"
 }
 
@@ -102,6 +94,29 @@ if [[ "$build_mock" != "1" ]]; then
   fi
 
   ensure_kernel_artifacts
+
+  # Copy kernel modules into the rootfs.  The kernel build happens after the
+  # rootfs apk stage, so the rootfs won't have modules yet on a fresh build.
+  # On cached rebuilds the modules are already present (build-rootfs.sh copies
+  # them during the first successful apk run).
+  modules_src="$ROOT/build/kernel/modules"
+  if [[ -d "$modules_src/lib/modules" ]]; then
+    modules_kver="$(ls "$modules_src/lib/modules/" 2>/dev/null || true)"
+    if [[ -n "$modules_kver" && ! -d "$ROOT/build/rootfs/lib/modules/$modules_kver" ]]; then
+      echo "installing kernel modules ($modules_kver) into rootfs"
+      chmod -R u+w "$ROOT/build/rootfs/lib" 2>/dev/null || true
+      mkdir -p "$ROOT/build/rootfs/lib/modules"
+      cp -a "$modules_src/lib/modules/$modules_kver" "$ROOT/build/rootfs/lib/modules/$modules_kver"
+      rm -f "$ROOT/build/rootfs/lib/modules/$modules_kver/build" "$ROOT/build/rootfs/lib/modules/$modules_kver/source"
+      if command -v depmod >/dev/null 2>&1; then
+        depmod -b "$ROOT/build/rootfs" "$modules_kver" 2>/dev/null || true
+      elif command -v busybox >/dev/null 2>&1; then
+        busybox depmod -b "$ROOT/build/rootfs" "$modules_kver" 2>/dev/null || true
+      fi
+      echo "kernel modules installed: $modules_kver"
+    fi
+  fi
+
   INITRAMFS_BUILD_DIR="$ROOT/build/initramfs" ROOTFS_DIR="$ROOT/build/rootfs" "$script_dir/scripts/build-initramfs.sh"
   if [[ "${BUILD_FAIL_AFTER_STAGE:-}" == "kernel" ]]; then
     die "injected failure after kernel stage"

@@ -9,7 +9,7 @@ QEMU_MEMORY ?= 1G
 QEMU_CPUS ?= 2
 QEMU_NET_MODE ?= tap
 QEMU_BRIDGE_IFACE ?= br0
-QEMU_HOSTFWD_PORT ?= none
+QEMU_HOSTFWD_PORT ?= 2222
 QEMU_IMAGE ?= dist/qos-x86_64.raw
 
 ROOT := $(shell pwd -P)
@@ -113,4 +113,5 @@ qemu:
 	@QEMU_BOOT_DISK=installed QEMU_MEMORY=$(QEMU_MEMORY) QEMU_CPUS=$(QEMU_CPUS) QEMU_NET_MODE=$(QEMU_NET_MODE) QEMU_BRIDGE_IFACE=$(QEMU_BRIDGE_IFACE) QEMU_HOSTFWD_PORT=$(QEMU_HOSTFWD_PORT) scripts/boot-image.sh --qemu
 
 clean:
+	@chmod -R u+w build 2>/dev/null || true
 	@rm -rf build dist/*.raw dist/*.iso
