@@ -1,5 +1,7 @@
 name: desktop-user
 packages:
   - sudo
+  - virtualbox-guest-additions
+  - virtualbox-guest-additions-udev
 depends_on:
   - river

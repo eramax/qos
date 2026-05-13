@@ -22,7 +22,7 @@ printf '%d\n' "$attempts" > "$retry_file"
 
 log "attempt $attempts/$max_attempts"
 
-for _mod in vmwgfx virtio_gpu amdgpu radeon i915 nouveau; do
+for _mod in vmwgfx virtio_gpu amdgpu radeon i915 nouveau vboxguest; do
   modprobe "$_mod" 2>/dev/null || true
 done
 
