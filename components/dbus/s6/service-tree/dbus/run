@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+
+mkdir -p /run/dbus /var/run/dbus
+rm -f /run/dbus/dbus.pid
+
+for bin in /usr/bin/dbus-daemon /usr/sbin/dbus-daemon /bin/dbus-daemon; do
+  [ -x "$bin" ] && exec "$bin" --system
+done
+
+echo "dbus: binary not found" >&2
+exit 1

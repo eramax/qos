@@ -3,10 +3,13 @@ extends: base
 kernel:
   fragments:
     - components/gpu-open-source/kernel/drm-open.conf
+    - components/gpu-open-source/kernel/input-evdev.conf
+    - components/gpu-open-source/kernel/usb-tablet.conf
 qemu:
   command: QOS_PROFILE=desktop QEMU_DISPLAY=gtk QEMU_MEMORY=2G QEMU_CPUS=2 QEMU_NET_MODE=tap QEMU_BRIDGE_IFACE=br0 QEMU_HOSTFWD_PORT=2222 builder/tools/boot-image.sh --qemu-iso dist/qos-desktop.iso
 components:
-  - desktop-session
+  - river
+  - dbus
   - seatd
   - eudev
   - pipewire

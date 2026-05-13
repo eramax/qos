@@ -1,0 +1,6 @@
+name: river
+packages:
+  - wayland
+  - river-classic
+  - foot
+  - font-dejavu

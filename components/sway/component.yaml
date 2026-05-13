@@ -1,4 +1,4 @@
-name: desktop-session
+name: sway
 packages:
   - wayland
   - sway

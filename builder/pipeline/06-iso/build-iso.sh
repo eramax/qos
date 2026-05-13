@@ -175,7 +175,9 @@ if [ -w /sysroot/sys/fs/cgroup/cgroup.subtree_control ]; then
   echo '+cpuset +cpu +memory +pids' \
     > /sysroot/sys/fs/cgroup/cgroup.subtree_control 2>/dev/null
 fi
+mkdir -p /sysroot/dev/pts /sysroot/dev/shm
 mount -t devpts devpts /sysroot/dev/pts 2>/dev/null
+mount -t tmpfs tmpfs /sysroot/dev/shm
 mount -t tmpfs tmpfs /sysroot/run
 mount -t tmpfs tmpfs /sysroot/tmp -o nosuid,nodev,mode=1777 2>/dev/null || true
 
@@ -262,6 +264,3 @@ xorriso -as mkisofs \
 echo ""
 echo "✅ ISO: $iso_output_dir/$iso_name ($(du -sh "$iso_output_dir/$iso_name" | awk '{print $1}'))"
 echo ""
-echo "  make live                        # boot live ISO (/dev/vda = install target)"
-echo "  qos-install --auto /dev/vda      # inside VM"
-echo "  poweroff && make qemu            # boot installed system"

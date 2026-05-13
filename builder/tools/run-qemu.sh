@@ -165,6 +165,8 @@ qemu_system_args=(
   -chardev socket,id=qga,path="$root/build/qemu/qga.sock",server=on,wait=off
   -device virtio-serial-pci
   -device virtserialport,chardev=qga,name=org.qemu.guest_agent.0
+  -device qemu-xhci
+  -device usb-tablet
   "${qemu_serial_arg[@]}"
   "${qemu_display_args[@]}"
 )

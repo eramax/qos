@@ -57,6 +57,22 @@ chmod -R u+w "$etc_dir/qos" 2>/dev/null || mkdir -p "$etc_dir/qos"
 mkdir -p "$etc_dir/qos/capabilities" "$etc_dir/qos/cluster" "$etc_dir/caddy" "$etc_dir/chrony"
 mkdir -p "$rootfs/root/.ssh"
 
+if [[ -x "$rootfs/usr/bin/dbus-daemon" ]] || [[ -x "$rootfs/usr/sbin/dbus-daemon" ]]; then
+  if ! grep -q '^messagebus:' "$etc_dir/group" 2>/dev/null; then
+    echo 'messagebus:x:101:' >> "$etc_dir/group"
+  fi
+  if ! grep -q '^messagebus:' "$etc_dir/passwd" 2>/dev/null; then
+    echo 'messagebus:x:101:101:messagebus:/var/empty:/sbin/nologin' >> "$etc_dir/passwd"
+  fi
+  if [[ -f "$etc_dir/shadow" ]]; then
+    chmod u+w "$etc_dir/shadow"
+    if ! grep -q '^messagebus:' "$etc_dir/shadow" 2>/dev/null; then
+      echo 'messagebus:!*:0:0::::' >> "$etc_dir/shadow"
+    fi
+    chmod 0400 "$etc_dir/shadow"
+  fi
+fi
+
 qos_profile="${QOS_PROFILE:-server}"
 component_rootfs_dir="${COMPONENT_ROOTFS_DIR:-}"
 [[ -n "$component_rootfs_dir" ]] || die "COMPONENT_ROOTFS_DIR is required"

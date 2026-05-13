@@ -1,0 +1,14 @@
+#!/bin/sh
+set -eu
+
+mkdir -p /run/elogind /run/systemd
+
+for bin in /usr/libexec/elogind/elogind /usr/lib/elogind/elogind /usr/sbin/elogind /sbin/elogind; do
+  if [ -f "$bin" ]; then
+    chmod 0755 "$bin" 2>/dev/null || true
+    exec "$bin"
+  fi
+done
+
+echo "elogind: binary not found" >&2
+exit 1
