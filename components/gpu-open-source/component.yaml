@@ -1,0 +1,10 @@
+name: gpu-open-source
+packages:
+  - mesa
+  - mesa-gl
+  - mesa-egl
+  - mesa-vulkan-ati
+  - mesa-vulkan-intel
+  - linux-firmware-amdgpu
+  - linux-firmware-radeon
+  - linux-firmware-i915

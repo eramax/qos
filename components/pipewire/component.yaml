@@ -1,0 +1,4 @@
+name: pipewire
+packages:
+  - pipewire
+  - pipewire-pulse

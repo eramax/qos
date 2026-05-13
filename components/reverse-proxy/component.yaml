@@ -1,0 +1,4 @@
+name: reverse-proxy
+depends_on:
+  - caddy
+packages: []

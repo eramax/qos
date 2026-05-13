@@ -1,0 +1,7 @@
+name: desktop-session
+packages:
+  - wayland
+  - sway
+  - foot
+  - chromium
+  - flatpak

@@ -1,0 +1,23 @@
+name: core
+packages:
+  - alpine-baselayout
+  - alpine-keys
+  - apk-tools
+  - busybox
+  - ca-certificates
+  - musl
+  - tzdata
+  - curl
+  - iproute2
+  - execline
+  - s6-linux-init
+  - s6-portable-utils
+  - s6-rc
+  - gcompat
+  - htop
+  - dcron
+  - e2fsprogs
+  - e2fsprogs-extra
+  - dosfstools
+  - sgdisk
+  - mtools
