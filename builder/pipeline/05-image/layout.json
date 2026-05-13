@@ -2,8 +2,8 @@
   "boot_mode": "uefi",
   "disk_format": "raw",
   "partition_table": "gpt",
-  "image_size": "2560M",
-  "description": "2.5GB base image with 1024MB root slots for desktop",
+  "image_size": "3072M",
+  "description": "3GB base image with 1280MB root slots for desktop",
   "partitions": [
     {
       "name": "efi",
@@ -18,7 +18,7 @@
       "mount": "/",
       "slot": "A",
       "immutable": true,
-      "size": "1024M",
+      "size": "1280M",
       "description": "Immutable root filesystem slot A"
     },
     {
@@ -27,7 +27,7 @@
       "mount": "/",
       "slot": "B",
       "immutable": true,
-      "size": "1024M",
+      "size": "1280M",
       "description": "Immutable root filesystem slot B (for OTA updates)"
     },
     {
