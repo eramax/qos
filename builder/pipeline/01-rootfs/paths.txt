@@ -2,6 +2,7 @@
 /bin
 /dev
 /dev/pts
+/dev/shm
 /etc
 /etc/apk
 /etc/apk/keys

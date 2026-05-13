@@ -145,6 +145,8 @@ fi
 mount -t devtmpfs devtmpfs /sysroot/dev
 mkdir -p /sysroot/dev/pts
 mount -t devpts devpts /sysroot/dev/pts
+mkdir -p /sysroot/dev/shm
+mount -t tmpfs tmpfs -o nosuid,nodev,noexec /sysroot/dev/shm
 mount -t tmpfs tmpfs /sysroot/run
 mount -t tmpfs tmpfs -o nosuid,nodev,mode=1777 /sysroot/tmp
 
