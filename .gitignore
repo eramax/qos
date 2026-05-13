@@ -1,4 +1,4 @@
 .worktrees/
 build/
 dist/
-virtualbox/
+virtualbox/qos/
