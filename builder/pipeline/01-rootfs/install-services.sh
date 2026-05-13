@@ -98,6 +98,10 @@ if [[ -x "$rootfs/usr/bin/dbus-daemon" ]] || [[ -x "$rootfs/usr/sbin/dbus-daemon
     fi
     chmod 0400 "$etc_dir/shadow"
   fi
+  if ! [[ -f "$etc_dir/machine-id" ]]; then
+    chmod u+w "$etc_dir"
+    cat /proc/sys/kernel/random/uuid | tr -d '-' > "$etc_dir/machine-id"
+  fi
 fi
 find "$etc_dir/s6/service-tree" -type f -name run -exec chmod 0755 {} \;
 find "$etc_dir/s6/s6-rc.d" -type f -name run -exec chmod 0755 {} \;
