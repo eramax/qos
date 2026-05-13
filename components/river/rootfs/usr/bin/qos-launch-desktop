@@ -39,7 +39,9 @@ log "waiting for /dev/input/event0 ..."
 _n=0; while [ ! -e /dev/input/event0 ] && [ "$_n" -lt 120 ]; do sleep 0.25; _n=$((_n+1)); done
 if [ -e /dev/input/event0 ]; then
   log "/dev/input/event0 found"
-  udevadm trigger --action=change /sys/class/input/event* 2>/dev/null || true
+  udevadm trigger --action=add --subsystem-match=input 2>/dev/null || true
+  udevadm trigger --action=add --subsystem-match=sound 2>/dev/null || true
+  udevadm settle 2>/dev/null || true
   sleep 0.5
 else
   log "WARN: /dev/input/event0 not found after 30s, retrying with WLR_LIBINPUT_NO_DEVICES=1"
@@ -59,6 +61,9 @@ chown "$(id -u):$(id -g)" "$XDG_RUNTIME_DIR" 2>/dev/null || true
 chmod 0700 "$XDG_RUNTIME_DIR" 2>/dev/null || true
 
 chmod +x "${XDG_CONFIG_HOME}/river/init" 2>/dev/null || true
+
+amixer set Master 100% unmute 2>/dev/null || true
+amixer set PCM 100% unmute 2>/dev/null || true
 
 log "starting river (renderer=pixman, seatd) ..."
 exec river 2>>"$LOG"
