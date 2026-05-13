@@ -1,5 +1,6 @@
 #!/bin/sh
-# qos-sway.sh — launch Sway on first interactive login on tty1.
+
+chmod 666 /dev/null 2>&1 || true
 
 LOG="/run/qos/sway.log"
 

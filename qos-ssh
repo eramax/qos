@@ -1,0 +1,6 @@
+#!/bin/bash
+# qos-ssh — run commands on the QOS live VM via SSH
+set -euo pipefail
+
+ssh-keygen -f "$HOME/.ssh/known_hosts" -R '[localhost]:2222' 2>/dev/null || true
+sshpass -p root ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 -p 2222 root@localhost "$@"

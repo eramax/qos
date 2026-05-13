@@ -1,0 +1,5 @@
+name: desktop-user
+packages:
+  - sudo
+depends_on:
+  - river

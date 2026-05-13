@@ -149,7 +149,11 @@ if [[ "$qemu_display" != "none" ]]; then
     qemu_display_args=(-vga none -display "$qemu_display,gl=on" \
       -device "$qemu_vga,xres=1280,yres=800,blob=on,hostmem=256M")
   else
-    qemu_display_args=(-display "$qemu_display" -device "$qemu_vga")
+    if [[ "$qemu_vga" == virtio-* ]]; then
+      qemu_display_args=(-vga none -display "$qemu_display" -device "${qemu_vga},edid=on,xres=1920,yres=1080")
+    else
+      qemu_display_args=(-display "$qemu_display" -device "$qemu_vga")
+    fi
   fi
 fi
 

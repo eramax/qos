@@ -57,6 +57,33 @@ chmod -R u+w "$etc_dir/qos" 2>/dev/null || mkdir -p "$etc_dir/qos"
 mkdir -p "$etc_dir/qos/capabilities" "$etc_dir/qos/cluster" "$etc_dir/caddy" "$etc_dir/chrony"
 mkdir -p "$rootfs/root/.ssh"
 
+qos_profile="${QOS_PROFILE:-server}"
+component_rootfs_dir="${COMPONENT_ROOTFS_DIR:-}"
+[[ -n "$component_rootfs_dir" ]] || die "COMPONENT_ROOTFS_DIR is required"
+[[ -d "$component_rootfs_dir" ]] || die "missing component rootfs stage dir: $component_rootfs_dir"
+cp -a "$component_rootfs_dir/." "$rootfs/"
+
+if ! grep -q '^emo:' "$etc_dir/passwd" 2>/dev/null; then
+  emo_pw_hash="$(openssl passwd -6 123)"
+  echo 'emo:x:1000:1000:emo:/home/emo:/bin/sh' >> "$etc_dir/passwd"
+  chmod u+w "$etc_dir/shadow"
+  echo "emo:${emo_pw_hash}:20000:0:99999:7:::" >> "$etc_dir/shadow"
+  chmod 0400 "$etc_dir/shadow"
+  echo 'emo:x:1000:emo' >> "$etc_dir/group"
+  sed -i '/^video:/s/$/,emo/' "$etc_dir/group" 2>/dev/null || echo 'video:x:27:emo' >> "$etc_dir/group"
+  sed -i '/^input:/s/$/,emo/' "$etc_dir/group" 2>/dev/null || echo 'input:x:28:emo' >> "$etc_dir/group"
+  sed -i '/^wheel:/s/$/,emo/' "$etc_dir/group" 2>/dev/null || echo 'wheel:x:10:emo' >> "$etc_dir/group"
+  chmod u+w "$etc_dir/sudoers" 2>/dev/null || true
+  echo '%wheel ALL=(ALL) ALL' >> "$etc_dir/sudoers"
+  chmod u+w "$rootfs/home" 2>/dev/null || true
+  mkdir -p "$rootfs/home/emo/.config/river"
+  if [ -f "$rootfs/root/.config/river/init" ]; then
+    cp "$rootfs/root/.config/river/init" "$rootfs/home/emo/.config/river/init"
+    chmod 0755 "$rootfs/home/emo/.config/river/init"
+  fi
+  chmod 0755 "$rootfs/root/.config/river/init" 2>/dev/null || true
+fi
+
 if [[ -x "$rootfs/usr/bin/dbus-daemon" ]] || [[ -x "$rootfs/usr/sbin/dbus-daemon" ]]; then
   if ! grep -q '^messagebus:' "$etc_dir/group" 2>/dev/null; then
     echo 'messagebus:x:101:' >> "$etc_dir/group"
@@ -72,15 +99,10 @@ if [[ -x "$rootfs/usr/bin/dbus-daemon" ]] || [[ -x "$rootfs/usr/sbin/dbus-daemon
     chmod 0400 "$etc_dir/shadow"
   fi
 fi
-
-qos_profile="${QOS_PROFILE:-server}"
-component_rootfs_dir="${COMPONENT_ROOTFS_DIR:-}"
-[[ -n "$component_rootfs_dir" ]] || die "COMPONENT_ROOTFS_DIR is required"
-[[ -d "$component_rootfs_dir" ]] || die "missing component rootfs stage dir: $component_rootfs_dir"
-cp -a "$component_rootfs_dir/." "$rootfs/"
 find "$etc_dir/s6/service-tree" -type f -name run -exec chmod 0755 {} \;
 find "$etc_dir/s6/s6-rc.d" -type f -name run -exec chmod 0755 {} \;
 find "$etc_dir/profile.d" -type f -name '*.sh' -exec chmod 0755 {} \;
+find "$rootfs/usr/bin" -type f -name 'qos-autologin-*' -exec chmod 0755 {} \;
 mkdir -p "$etc_dir/qos"
 printf '%s\n' "$qos_profile" > "$etc_dir/qos/profile"
 if [[ -f "$etc_dir/cloud/cloud.cfg" ]]; then

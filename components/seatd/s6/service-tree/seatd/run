@@ -17,4 +17,4 @@ fi
 }
 
 mkdir -p /run
-exec "$SEATD_BIN" -l info
+exec "$SEATD_BIN" -l info -g video
