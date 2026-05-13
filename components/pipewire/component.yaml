@@ -2,3 +2,5 @@ name: pipewire
 packages:
   - pipewire
   - pipewire-pulse
+  - pipewire-alsa
+  - alsa-utils

@@ -1,0 +1,16 @@
+{
+  "HardwareAccelerationModeEnabled": true,
+  "GPUProcessEnabled": true,
+  "MetricsReportingEnabled": false,
+  "SafeBrowsingEnabled": false,
+  "TranslateEnabled": false,
+  "SyncDisabled": true,
+  "DefaultBrowserSettingEnabled": false,
+  "BlockExternalExtensions": true,
+  "HomepageLocation": "about:blank",
+  "NewTabPageLocation": "about:blank",
+  "DefaultDownloadDirectory": "/tmp",
+  "ComponentUpdatesEnabled": false,
+  "EnableMediaStream": true,
+  "PreloadingEnabled": true
+}

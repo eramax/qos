@@ -54,6 +54,8 @@ export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-/root/.config}"
 export XDG_SESSION_TYPE=wayland
 export XDG_VTNR=1
 export LIBSEAT_BACKEND="${LIBSEAT_BACKEND:-seatd}"
+export WLR_DRM_NO_MODIFIERS=1
+export WLR_EGL_NO_MODIFIERS=1
 mkdir -p "$XDG_RUNTIME_DIR" 2>/dev/null || true
 chown "$(id -u):$(id -g)" "$XDG_RUNTIME_DIR" 2>/dev/null || true
 chmod 0700 "$XDG_RUNTIME_DIR" 2>/dev/null || true
