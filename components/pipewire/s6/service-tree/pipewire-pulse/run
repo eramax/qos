@@ -1,0 +1,14 @@
+#!/bin/sh
+set -eu
+
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/0}"
+mkdir -p "$XDG_RUNTIME_DIR"
+
+_n=0
+while [ "$_n" -lt 30 ]; do
+  [ -S "$XDG_RUNTIME_DIR/pipewire-0" ] && break
+  sleep 0.5
+  _n=$((_n+1))
+done
+
+exec /usr/bin/pipewire-pulse
