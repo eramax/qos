@@ -108,16 +108,17 @@ cat > "$live_stage/init" <<'LIVE_INIT'
 PATH=/bin
 exec >/dev/console 2>&1
 echo "[live-init] QOS Live CD starting..."
-echo "[live-init] kernel cmdline: $(cat /proc/cmdline)"
 
-mount -t proc proc /proc
-mount -t sysfs sysfs /sys
-mount -t devtmpfs devtmpfs /dev
-mount -t tmpfs tmpfs /run
+mount -t proc proc /proc || { echo "[live-init] FATAL: proc mount failed"; exec sh; }
+mount -t sysfs sysfs /sys || { echo "[live-init] FATAL: sysfs mount failed"; exec sh; }
+mount -t devtmpfs devtmpfs /dev || { echo "[live-init] FATAL: devtmpfs mount failed"; exec sh; }
+mount -t tmpfs tmpfs /run || { echo "[live-init] FATAL: tmpfs mount failed"; exec sh; }
+echo "[live-init] kernel cmdline: $(cat /proc/cmdline)"
 
 echo "[live-init] Searching for rootfs.sfs..."
 live_dev=""
-for dev in /dev/vd* /dev/sd* /dev/nvme*n*; do
+ls -l /dev/sr0 2>/dev/null || true
+for dev in /dev/sr0 /dev/vd* /dev/sd* /dev/sr* /dev/nvme*n*; do
   [ -b "$dev" ] || continue
   if mount -t iso9660 -o ro "$dev" /mnt/live 2>/dev/null; then
     if [ -f /mnt/live/rootfs.sfs ]; then

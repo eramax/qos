@@ -42,6 +42,21 @@ while IFS= read -r applet; do
   ln -sf busybox "$stage_root/bin/$applet"
 done < <("$stage_root/bin/busybox" --list)
 
+modules_src="$rootfs/lib/modules"
+if [[ -d "$modules_src" ]]; then
+  kver="$(ls -1 "$modules_src" | head -n 1 || true)"
+  if [[ -n "$kver" && -d "$modules_src/$kver" ]]; then
+    mkdir -p "$stage_root/lib/modules"
+    cp -a "$modules_src/$kver" "$stage_root/lib/modules/$kver"
+    rm -f "$stage_root/lib/modules/$kver/build" "$stage_root/lib/modules/$kver/source"
+    if command -v depmod >/dev/null 2>&1; then
+      depmod -b "$stage_root" "$kver" 2>/dev/null || true
+    else
+      busybox depmod -b "$stage_root" "$kver" 2>/dev/null || true
+    fi
+  fi
+fi
+
 cat > "$stage_root/init" <<EOF
 #!/bin/sh
 set -eu
