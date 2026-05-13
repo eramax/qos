@@ -72,6 +72,10 @@ riverctl map-pointer normal Super BTN_MIDDLE toggle-float
 riverctl default-layout rivertile
 rivertile -view-padding 6 -outer-padding 6 >/dev/null 2>&1 &
 
+VBoxClient --clipboard >/dev/null 2>&1 &
+VBoxClient --draganddrop >/dev/null 2>&1 &
+VBoxClient --seamless >/dev/null 2>&1 &
+
 chromium \
   --ozone-platform=wayland \
   --no-sandbox \
