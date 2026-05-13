@@ -62,6 +62,7 @@ ln -s /usr/bin/s6-linux-init "$rootfs/sbin/init"
 
 mkdir -p "$rootfs/etc/qos"
 install -m 0644 "$root/builder/pipeline/05-image/slots.json" "$rootfs/etc/qos/slots.json"
+install -m 0644 "$root/builder/pipeline/05-image/layout.json" "$rootfs/etc/qos/layout.json"
 
 # Dev/test image: set root password to "root".
 # Must happen before the chmod loop locks /etc to 0555.
@@ -84,6 +85,7 @@ if [[ -f "$rootfs/etc/apk/repositories" ]]; then
   chmod 0444 "$rootfs/etc/apk/repositories"
 fi
 chmod 0444 "$rootfs/etc/qos/slots.json" 2>/dev/null || true
+chmod 0444 "$rootfs/etc/qos/layout.json" 2>/dev/null || true
 if [[ -d "$rootfs/etc/apk/keys" ]]; then
   chmod -R a-w "$rootfs/etc/apk/keys"
 fi

@@ -9,8 +9,24 @@
 set -eu
 export PATH=/usr/sbin:/sbin:/usr/bin:/bin
 
-EFI_SIZE_MB=64
-ROOT_SIZE_MB=128
+LAYOUT_FILE="/etc/qos/layout.json"
+
+layout_part_size() {
+  # Extract size (in MB digits) for a named partition from layout.json.
+  awk -v part="$1" '
+    $0 ~ "\"name\"[[:space:]]*:[[:space:]]*\"" part "\"" { found=1; next }
+    found && /"size"/ && /[0-9]+/ { match($0, /[0-9]+/); print substr($0, RSTART, RLENGTH); exit }
+  ' "$LAYOUT_FILE"
+}
+
+EFI_SIZE_MB=$(layout_part_size efi)
+ROOT_SIZE_MB=$(layout_part_size root-a)
+
+if [ -z "$EFI_SIZE_MB" ] || [ -z "$ROOT_SIZE_MB" ]; then
+  echo "ERROR: could not read partition sizes from $LAYOUT_FILE" >&2
+  exit 1
+fi
+
 INSTALL_LOG="/tmp/qos-install.log"
 
 if [ -t 1 ]; then
