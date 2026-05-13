@@ -1,17 +1,15 @@
 #!/bin/sh
-# Fix permissions that break as non-root user (must happen before any redirect)
+set -eu
 
-chmod 666 /dev/null 2>&1 || true
-chmod 666 /run/seatd.sock 2>&1 || true
+chmod 666 /dev/null 2>/dev/null || true
+chmod 666 /run/seatd.sock 2>/dev/null || true
 
 LOG="/run/qos/river.log"
 log() { printf '[qos-river] %s\n' "$*" >> "$LOG" 2>/dev/null; }
 
 mkdir -p /run/qos 2>/dev/null || true
 
-[ "$(tty 2>/dev/null)" = "/dev/tty1" ] || { log "skip: not tty1 ($(tty 2>/dev/null))"; return 0 2>/dev/null || exit 0; }
-[ -z "${WAYLAND_DISPLAY:-}" ] || { log "skip: WAYLAND_DISPLAY set"; return 0 2>/dev/null || exit 0; }
-command -v river >/dev/null 2>&1 || { log "skip: river not found"; return 0 2>/dev/null || exit 0; }
+command -v river >/dev/null 2>&1 || { log "skip: river not found"; exit 0; }
 
 retry_file="/run/qos/river-attempts"
 max_attempts=3
@@ -20,7 +18,7 @@ attempts=0
 [ -f "$retry_file" ] && attempts="$(cat "$retry_file" 2>/dev/null)" || true
 attempts=$((attempts + 1))
 printf '%d\n' "$attempts" > "$retry_file"
-[ "$attempts" -le "$max_attempts" ] || { log "skip: $attempts attempts exceeded max $max_attempts"; return 0 2>/dev/null || exit 0; }
+[ "$attempts" -le "$max_attempts" ] || { log "skip: $attempts attempts exceeded max $max_attempts"; exit 0; }
 
 log "attempt $attempts/$max_attempts"
 
@@ -33,7 +31,7 @@ _n=0; while [ ! -e /dev/dri/card0 ] && [ "$_n" -lt 60 ]; do sleep 0.25; _n=$((_n
 if [ ! -e /dev/dri/card0 ]; then
   log "FATAL: /dev/dri/card0 not found after 15s"
   log "ls /dev/dri: $(ls /dev/dri 2>/dev/null || echo '(empty)')"
-  return 0 2>/dev/null || exit 0
+  exit 1
 fi
 log "/dev/dri/card0 found"
 

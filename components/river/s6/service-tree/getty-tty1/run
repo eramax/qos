@@ -1,4 +1,6 @@
 #!/bin/sh
 set -eu
 
-exec /sbin/getty -n -l /usr/bin/qos-autologin-root 115200 tty1
+# Start the desktop session directly on tty1 so the GUI does not depend on
+# shell profile initialization or login-shell quirks.
+exec /sbin/getty -n -l /usr/bin/qos-launch-desktop 115200 tty1

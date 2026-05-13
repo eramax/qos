@@ -8,7 +8,6 @@ log() { printf '[qos-sway] %s\n' "$*" >> "$LOG" 2>/dev/null; }
 
 mkdir -p /run/qos 2>/dev/null || true
 
-case "$-" in *i*) ;; *) return 0 2>/dev/null || exit 0 ;; esac
 [ "$(tty 2>/dev/null)" = "/dev/tty1" ] || { log "skip: not tty1 ($(tty 2>/dev/null))"; return 0 2>/dev/null || exit 0; }
 [ -z "${WAYLAND_DISPLAY:-}" ] || { log "skip: WAYLAND_DISPLAY already set"; return 0 2>/dev/null || exit 0; }
 command -v sway >/dev/null 2>&1 || { log "skip: sway not found"; return 0 2>/dev/null || exit 0; }
@@ -24,7 +23,7 @@ printf '%d\n' "$attempts" > "$retry_file"
 
 log "attempt $attempts/$max_attempts"
 
-for _mod in virtio-gpu amdgpu radeon i915 nouveau; do
+for _mod in virtio_gpu amdgpu radeon i915 nouveau; do
   modprobe "$_mod" 2>/dev/null || true
 done
 
