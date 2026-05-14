@@ -99,6 +99,7 @@ export LANG=C.UTF-8
 export CHARSET=UTF-8
 BASHRC
   chown -R 1000:1000 "$rootfs/home/emo"
+  chmod 0700 "$rootfs/home/emo"
   chmod 0644 "$rootfs/home/emo/.profile" "$rootfs/home/emo/.bashrc"
 fi
 
