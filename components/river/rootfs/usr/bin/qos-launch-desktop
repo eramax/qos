@@ -3,14 +3,35 @@ set -eu
 
 chmod 666 /run/seatd.sock 2>/dev/null || true
 
-# Allow specifying username as parameter or environment variable (default: emo)
-USERNAME="${1:-${QOS_DESKTOP_USER:-emo}}"
-USERID=$(getent passwd "$USERNAME" | cut -d: -f3)
-if [ -z "$USERID" ]; then
-  echo "User $USERNAME not found" >&2
+# Allow specifying username as parameter or environment variable
+# Skip getty's -- argument if present
+USERNAME="${QOS_DESKTOP_USER:-}"
+if [ -z "$USERNAME" ] && [ -n "${1:-}" ] && [ "$1" != "--" ] && [ "$1" != "-" ]; then
+  USERNAME="$1"
+fi
+
+# If still not specified, find first user with UID >= 1000
+if [ -z "$USERNAME" ]; then
+  while IFS=: read -r user _ uid _; do
+    if [ "$uid" -ge 1000 ] 2>/dev/null && [ "$uid" -lt 65534 ]; then
+      USERNAME="$user"
+      break
+    fi
+  done < /etc/passwd
+fi
+
+if [ -z "$USERNAME" ]; then
+  echo "ERROR: No desktop user found (set QOS_DESKTOP_USER or add user with UID >= 1000)" >&2
   exit 1
 fi
-USERHOME=$(getent passwd "$USERNAME" | cut -d: -f6)
+
+# Look up user's UID and home directory
+USERID=$(grep "^$USERNAME:" /etc/passwd | cut -d: -f3)
+USERHOME=$(grep "^$USERNAME:" /etc/passwd | cut -d: -f6)
+if [ -z "$USERID" ] || [ -z "$USERHOME" ]; then
+  echo "ERROR: User $USERNAME not found in /etc/passwd" >&2
+  exit 1
+fi
 
 LOG="/run/qos/river.log"
 log() { printf '[qos-river] %s\n' "$*" >> "$LOG" 2>/dev/null; }
