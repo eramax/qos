@@ -48,6 +48,8 @@ else
   export WLR_LIBINPUT_NO_DEVICES=1
 fi
 
+export LANG="${LANG:-C.UTF-8}"
+export CHARSET="${CHARSET:-UTF-8}"
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-/root/.config}"
 export XDG_SESSION_TYPE=wayland

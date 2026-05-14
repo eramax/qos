@@ -18,7 +18,7 @@ riverctl keyboard-layout -options "" us
 riverctl map normal Super Q close
 riverctl map normal Super+Shift E exit
 
-riverctl map normal Super Return spawn foot >/dev/null 2>&1
+riverctl map normal Super Return spawn "foot --login-shell" >/dev/null 2>&1
 riverctl map normal Super C spawn "chromium \
   --ozone-platform=wayland \
   --no-sandbox \
@@ -31,7 +31,7 @@ riverctl map normal Super C spawn "chromium \
   --disable-breakpad \
   --disable-default-apps \
   --no-service-autorun" >/dev/null 2>&1
-riverctl map normal Super S spawn "foot -e /bin/sh" >/dev/null 2>&1
+riverctl map normal Super S spawn "foot --login-shell" >/dev/null 2>&1
 
 riverctl map normal Super J focus-view next
 riverctl map normal Super K focus-view previous
