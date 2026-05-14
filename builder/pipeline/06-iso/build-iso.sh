@@ -117,16 +117,20 @@ echo "[live-init] kernel cmdline: $(cat /proc/cmdline)"
 
 echo "[live-init] Searching for rootfs.sfs..."
 live_dev=""
-ls -l /dev/sr0 2>/dev/null || true
-for dev in /dev/sr0 /dev/vd* /dev/sd* /dev/sr* /dev/nvme*n*; do
-  [ -b "$dev" ] || continue
-  if mount -t iso9660 -o ro "$dev" /mnt/live 2>/dev/null; then
-    if [ -f /mnt/live/rootfs.sfs ]; then
-      live_dev="$dev"
-      break
+_retry=0
+while [ "$_retry" -lt 10 ]; do
+  for dev in /dev/sr0 /dev/vd* /dev/sd* /dev/sr* /dev/nvme*n*; do
+    [ -b "$dev" ] || continue
+    if mount -t iso9660 -o ro "$dev" /mnt/live 2>/dev/null; then
+      if [ -f /mnt/live/rootfs.sfs ]; then
+        live_dev="$dev"
+        break 2
+      fi
+      umount /mnt/live 2>/dev/null || true
     fi
-    umount /mnt/live 2>/dev/null || true
-  fi
+  done
+  _retry=$((_retry + 1))
+  sleep 1
 done
 
 if [ -z "$live_dev" ]; then
@@ -158,8 +162,12 @@ mkdir -p /sysroot/etc/qos
 echo "live-cdrom" > /sysroot/etc/qos/boot-source
 
 # Ensure cloud-init is enabled on the live CD so it can configure network and SSH via cloud metadata.
-chmod u+w /sysroot/etc/cloud 2>/dev/null || true
+# Restrict datasource_list to avoid aggressive /dev/sr0 scanning which causes "Can't open blockdev" errors.
+chmod u+w /sysroot/etc/cloud /sysroot/etc/cloud/cloud.cfg.d 2>/dev/null || true
 mkdir -p /sysroot/etc/cloud/cloud.cfg.d
+cat > /sysroot/etc/cloud/cloud.cfg.d/90-qos-live-datasources.cfg <<'EOF'
+datasource_list: [ NoCloud, Ec2, None ]
+EOF
 rm -f /sysroot/etc/cloud/cloud.cfg.d/99-qos-live-disable.cfg
 rm -f /sysroot/etc/cloud-init.disabled
 

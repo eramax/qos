@@ -1,10 +1,10 @@
 #!/bin/sh
 set -eu
 
+# Wait for DRI card (GPU)
 _n=0; while [ ! -e /dev/dri/card0 ] && [ "$_n" -lt 120 ]; do sleep 0.25; _n=$((_n+1)); done
 
-chmod 666 /dev/null 2>/dev/null || true
-chmod 666 /run/seatd.sock 2>/dev/null || true
+# Fix GPU permissions for video group
 chown root:video /dev/dri/card0 /dev/dri/renderD128 2>/dev/null || true
 chmod 660 /dev/dri/card0 /dev/dri/renderD128 2>/dev/null || true
 
@@ -17,5 +17,3 @@ for dev in /sys/class/input/*/device/name; do
       ;;
   esac
 done
-
-exec sleep 2147483647

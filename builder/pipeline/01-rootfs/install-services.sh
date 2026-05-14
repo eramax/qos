@@ -206,32 +206,78 @@ s6_skel_dir="$s6_base_dir/skel"
 s6_current_dir="$s6_base_dir/current"
 maker_bin="$rootfs/usr/bin/s6-linux-init-maker"
 maker_loader="$rootfs/lib/ld-musl-x86_64.so.1"
-if [[ -x "$maker_bin" && -x "$maker_loader" ]]; then
-  maker_stage_dir="$(mktemp -u "$root/build/cache/s6-linux-init.XXXXXX")"
-  cleanup_maker_stage() {
-    chmod -R u+w "$maker_stage_dir" 2>/dev/null || true
-    rm -rf "$maker_stage_dir"
-  }
-  trap cleanup_maker_stage EXIT INT TERM
+[[ -x "$maker_bin" ]] || die "missing s6-linux-init-maker in rootfs: $maker_bin"
+[[ -x "$maker_loader" ]] || die "missing musl loader in rootfs: $maker_loader"
+
+maker_stage_dir="$(mktemp -u "$root/build/cache/s6-linux-init.XXXXXX")"
+cleanup_maker_stage() {
+  chmod -R u+w "$maker_stage_dir" 2>/dev/null || true
+  rm -rf "$maker_stage_dir"
+}
+trap cleanup_maker_stage EXIT INT TERM
 
   LD_LIBRARY_PATH="$rootfs/lib:$rootfs/usr/lib" \
     "$maker_loader" "$maker_bin" \
     -1 \
-    -D default \
     -p /usr/sbin:/usr/bin:/sbin:/bin \
     -f "$s6_skel_dir" \
     "$maker_stage_dir" >/dev/null
 
-  chmod -R u+w "$s6_current_dir" 2>/dev/null || true
-  rm -rf "$s6_current_dir"
-  cp -a "$maker_stage_dir" "$s6_current_dir"
+chmod -R u+w "$s6_current_dir" 2>/dev/null || true
+rm -rf "$s6_current_dir"
+cp -a "$maker_stage_dir" "$s6_current_dir"
 
-  cat > "$s6_current_dir/scripts/rc.init" <<'EOF'
-#!/bin/sh -e
+# Compile s6-rc database.
+# Standard path for s6-rc-init fallback is /etc/s6-rc/compiled.
+compiled_dir="$etc_dir/s6-rc/compiled"
+s6_rc_src="$etc_dir/s6/s6-rc.d"
+service_tree="$etc_dir/s6/service-tree"
+rm -rf "$compiled_dir"
+mkdir -p "$etc_dir/s6-rc"
 
+# s6-rc-compile requires 'run' scripts to be in the source dir for longruns.
+for d in "$s6_rc_src"/*; do
+  [ -d "$d" ] || continue
+  name="${d##*/}"
+  if [ -f "$d/type" ] && [ "$(cat "$d/type")" = "longrun" ]; then
+    if [ -f "$service_tree/$name/run" ]; then
+      ln -sf "../../service-tree/$name/run" "$d/run"
+    fi
+  fi
+done
+
+LD_LIBRARY_PATH="$rootfs/lib:$rootfs/usr/lib" \
+  "$maker_loader" "$rootfs/usr/bin/s6-rc-compile" \
+  "$compiled_dir" "$s6_rc_src" >/dev/null
+
+# Create a 'default' bundle that includes ALL services if it doesn't exist.
+# We do this after the first compile to find all available services.
+if [ ! -d "$s6_rc_src/default" ]; then
+  mkdir -p "$s6_rc_src/default"
+  echo "bundle" > "$s6_rc_src/default/type"
+  rm -f "$s6_rc_src/default/contents"
+  for d in "$s6_rc_src"/*; do
+    [ -d "$d" ] || continue
+    name="${d##*/}"
+    [ "$name" = "default" ] && continue
+    echo "$name" >> "$s6_rc_src/default/contents"
+  done
+  # Re-compile with the new default bundle.
+  rm -rf "$compiled_dir"
+  LD_LIBRARY_PATH="$rootfs/lib:$rootfs/usr/lib" \
+    "$maker_loader" "$rootfs/usr/bin/s6-rc-compile" \
+    "$compiled_dir" "$s6_rc_src" >/dev/null
+fi
+
+cat > "$s6_current_dir/scripts/rc.init" <<'EOF'
+#!/bin/sh
+
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
 service_root=/run/service
 
 mkdir -p "$service_root"
+
+# 1. Start Core Services
 for service in /etc/s6/service-tree/*; do
   [ -e "$service" ] || continue
   name="${service##*/}"
@@ -240,83 +286,57 @@ for service in /etc/s6/service-tree/*; do
   chmod 0755 "$service_root/$name"
 done
 
-exec /usr/bin/s6-svscanctl -a "$service_root"
+# 2. Trigger Supervision
+s6-svscanctl -a "$service_root"
 EOF
-  chmod 0755 "$s6_current_dir/scripts/rc.init"
+chmod 0755 "$s6_current_dir/scripts/rc.init"
 
-  cat > "$s6_current_dir/scripts/runlevel" <<'EOF'
+cat > "$s6_current_dir/scripts/runlevel" <<'EOF'
 #!/bin/sh -e
 
 exec /etc/s6-linux-init/current/scripts/rc.init "$@"
 EOF
-  chmod 0755 "$s6_current_dir/scripts/runlevel"
+chmod 0755 "$s6_current_dir/scripts/runlevel"
 
-  cat > "$s6_current_dir/bin/init" <<'EOF'
+cat > "$s6_current_dir/bin/init" <<'EOF'
 #!/usr/bin/execlineb -S0
 
 /usr/bin/s6-linux-init -v 1 -m 0022 -c "/etc/s6-linux-init/current" -p "/usr/sbin:/usr/bin:/sbin:/bin" -D "default" -- "$@"
 EOF
-  cat > "$s6_current_dir/bin/halt" <<'EOF'
+cat > "$s6_current_dir/bin/halt" <<'EOF'
 #!/usr/bin/execlineb -S0
 
 /usr/bin/s6-linux-init-hpr -h $@
 EOF
-  cat > "$s6_current_dir/bin/poweroff" <<'EOF'
+cat > "$s6_current_dir/bin/poweroff" <<'EOF'
 #!/usr/bin/execlineb -S0
 
 /usr/bin/s6-linux-init-hpr -p $@
 EOF
-  cat > "$s6_current_dir/bin/reboot" <<'EOF'
+cat > "$s6_current_dir/bin/reboot" <<'EOF'
 #!/usr/bin/execlineb -S0
 
 /usr/bin/s6-linux-init-hpr -r $@
 EOF
-  cat > "$s6_current_dir/bin/shutdown" <<'EOF'
+cat > "$s6_current_dir/bin/shutdown" <<'EOF'
 #!/usr/bin/execlineb -S0
 
 /usr/bin/s6-linux-init-shutdown $@
 EOF
-  cat > "$s6_current_dir/bin/telinit" <<'EOF'
+cat > "$s6_current_dir/bin/telinit" <<'EOF'
 #!/usr/bin/execlineb -S0
 
 /usr/bin/s6-linux-init-telinit $@
 EOF
 
-  chmod u+w "$rootfs/sbin"
-  rm -f "$rootfs/sbin/init"
-  ln -sfn /etc/s6-linux-init/current/bin/init "$rootfs/sbin/init"
-  for helper in halt poweroff reboot shutdown telinit; do
-    rm -f "$rootfs/sbin/$helper"
-    ln -sfn "/etc/s6-linux-init/current/bin/$helper" "$rootfs/sbin/$helper"
-  done
-  chmod a-w "$rootfs/sbin"
-else
-  chmod -R u+w "$s6_current_dir" 2>/dev/null || true
-  rm -rf "$s6_current_dir"
-  mkdir -p "$s6_current_dir/scripts" "$s6_current_dir/env" "$s6_current_dir/run-image/service" "$s6_current_dir/run-image/uncaught-logs"
-  cat > "$s6_current_dir/scripts/rc.init" <<'EOF'
-#!/bin/sh -e
-
-service_root=/run/service
-
-mkdir -p "$service_root"
-for service in /etc/s6/service-tree/*; do
-  [ -e "$service" ] || continue
-  name="${service##*/}"
-  rm -rf "$service_root/$name"
-  cp -a "$service" "$service_root/$name"
-  chmod 0755 "$service_root/$name"
+chmod u+w "$rootfs/sbin"
+rm -f "$rootfs/sbin/init"
+ln -sfn /etc/s6-linux-init/current/bin/init "$rootfs/sbin/init"
+for helper in halt poweroff reboot shutdown telinit; do
+  rm -f "$rootfs/sbin/$helper"
+  ln -sfn "/etc/s6-linux-init/current/bin/$helper" "$rootfs/sbin/$helper"
 done
-
-exec /usr/bin/s6-svscanctl -a "$service_root"
-EOF
-  cat > "$s6_current_dir/scripts/runlevel" <<'EOF'
-#!/bin/sh -e
-
-exec /etc/s6-linux-init/current/scripts/rc.init "$@"
-EOF
-  chmod 0755 "$s6_current_dir/scripts/rc.init" "$s6_current_dir/scripts/runlevel"
-fi
+chmod a-w "$rootfs/sbin"
 
 # Re-harden the staged configuration tree for the immutable image.
 chmod -R a-w "$etc_dir"

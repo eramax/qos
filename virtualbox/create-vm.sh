@@ -7,11 +7,21 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 VM_NAME="qos"
 VM_DIR="$SCRIPT_DIR/qos"
-RAM_MB=8192
-CPUS=4
+
+# ── Profile configuration ───────────────────────────────────────────────────
+PROFILE="${1:-desktop}"
+if [[ "$PROFILE" == "server" ]]; then
+  RAM_MB=2048
+  CPUS=2
+  ISO_PATH="$PROJECT_ROOT/dist/qos-server.iso"
+else
+  RAM_MB=8192
+  CPUS=4
+  ISO_PATH="$PROJECT_ROOT/dist/qos-desktop.iso"
+fi
+
 VRAM_MB=128
 DISK_SIZE_MB=8192
-ISO_PATH="$PROJECT_ROOT/dist/qos-desktop.iso"
 SERIAL_LOG="$PROJECT_ROOT/build/screens/qos-serial.log"
 SSH_HOST_PORT=2222
 SSH_GUEST_PORT=22
@@ -99,25 +109,19 @@ VBoxManage modifyvm "$VM_NAME" \
   --nestedpaging   on \
   --paravirt-provider kvm
 
-# ── 11. Storage: IDE (DVD) ─────────────────────────────────────────────────────
-VBoxManage storagectl "$VM_NAME" \
-  --name       "IDE Controller" \
-  --add        ide \
-  --controller PIIX4
-
-VBoxManage storageattach "$VM_NAME" \
-  --storagectl "IDE Controller" \
-  --port       0 \
-  --device     0 \
-  --type       dvddrive \
-  --medium     "$ISO_PATH"
-
-# ── 12. Storage: SATA (VDI disk) ──────────────────────────────────────────────
+# ── 11. Storage: SATA (DVD and VDI disk) ──────────────────────────────────────
 VBoxManage storagectl "$VM_NAME" \
   --name       "SATA Controller" \
   --add        sata \
   --controller IntelAhci \
-  --portcount  1
+  --portcount  2
+
+VBoxManage storageattach "$VM_NAME" \
+  --storagectl "SATA Controller" \
+  --port       0 \
+  --device     0 \
+  --type       dvddrive \
+  --medium     "$ISO_PATH"
 
 VDI_PATH="$VM_DIR/qos.vdi"
 if [ ! -f "$VDI_PATH" ]; then
@@ -129,7 +133,7 @@ fi
 
 VBoxManage storageattach "$VM_NAME" \
   --storagectl "SATA Controller" \
-  --port       0 \
+  --port       1 \
   --device     0 \
   --type       hdd \
   --medium     "$VDI_PATH"
@@ -138,6 +142,8 @@ VBoxManage storageattach "$VM_NAME" \
 VBoxManage setextradata "$VM_NAME" "GUI/AutoresizeGuest" 1
 
 echo ""
-echo "VM '$VM_NAME' created successfully."
+echo "VM '$VM_NAME' created successfully (profile: $PROFILE)."
 echo "Start with:  VBoxManage startvm '$VM_NAME' --type gui"
-echo "SSH:         sshpass -p 'root' ssh -p $SSH_HOST_PORT root@localhost"
+echo "SSH (emo):   sshpass -p 'emo2500' ssh -p $SSH_HOST_PORT emo@localhost"
+echo "SSH (root):  ssh -p $SSH_HOST_PORT -o StrictHostKeyChecking=no root@localhost"
+echo "Note: Root password is disabled. Use your SSH key for root access."

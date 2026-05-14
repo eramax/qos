@@ -15,7 +15,6 @@ mkdir -p "$DNSMASQ_LOG"
 if [ ! -x "$DNSMASQ_BIN" ]; then
     echo "Warning: dnsmasq not found, DNS service disabled"
     # Sleep indefinitely to prevent service restart loop
-    exec sleep infinity
 fi
 
 # Start dnsmasq

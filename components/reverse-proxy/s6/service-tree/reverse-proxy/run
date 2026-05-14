@@ -17,7 +17,7 @@ mkdir -p "$CADDY_DATA" "$CADDY_LOG"
 if [ ! -x "$CADDY_BIN" ]; then
     echo "Warning: caddy not found, reverse proxy disabled"
     # Sleep indefinitely to prevent service restart loop
-    exec sleep infinity
+    
 fi
 
 # Start caddy

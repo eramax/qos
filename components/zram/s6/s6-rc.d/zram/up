@@ -9,7 +9,6 @@ zram_name="${zram_dev##*/}"
 size_bytes="${ZRAM_SWAP_SIZE_BYTES:-0}"
 
 if /bin/busybox grep -q " $zram_dev " /proc/swaps 2>/dev/null; then
-  exec sleep 2147483647
 fi
 
 if [ ! -e /sys/class/block/zram0 ] && [ -e "$zram_control" ]; then
@@ -51,4 +50,3 @@ done
 
 /bin/busybox swapon "$zram_dev" 2>/dev/null || { echo "zram: swapon failed" >&2; exit 1; }
 
-exec sleep 2147483647
