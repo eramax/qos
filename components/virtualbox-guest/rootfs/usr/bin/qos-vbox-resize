@@ -14,9 +14,9 @@ find_virtual_connector() {
     [ -d "$card" ] || continue
     for output in "$card"/*Virtual*; do
       [ -d "$output" ] || continue
-      name="${output##*/}"
+      sysfs_name="${output##*/}"
       modes_file="$output/modes"
-      [ -f "$modes_file" ] && echo "$output" "$name" && return 0
+      [ -f "$modes_file" ] && echo "$output" "$sysfs_name" && return 0
     done
   done
   return 1
@@ -28,7 +28,8 @@ if [ -z "$output_info" ]; then
 fi
 
 CONNECTOR_SYSFS=$(echo "$output_info" | cut -d' ' -f1)
-CONNECTOR_NAME=$(echo "$output_info" | cut -d' ' -f2)
+SYSFS_NAME=$(echo "$output_info" | cut -d' ' -f2)
+CONNECTOR_NAME="${SYSFS_NAME#card*-}"
 
 LAST_MODE=""
 
