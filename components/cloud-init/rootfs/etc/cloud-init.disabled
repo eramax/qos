@@ -1,0 +1,9 @@
+# Cloud-init is disabled by default on non-cloud VPS environments.
+#
+# Cloud-init tries to detect cloud metadata services (ConfigDrive, EC2, etc.)
+# which don't exist on traditional VPS providers. This causes boot delays.
+#
+# To enable cloud-init on a cloud platform (AWS, CloudStack, etc.):
+#   rm /etc/cloud-init.disabled
+#
+# Network configuration should be handled via DHCP or manual /etc/network/interfaces.
