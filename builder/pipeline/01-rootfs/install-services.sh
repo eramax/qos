@@ -82,6 +82,26 @@ if ! grep -q '^emo:' "$etc_dir/passwd" 2>/dev/null; then
     chmod 0755 "$rootfs/home/emo/.config/river/init"
   fi
   chmod 0755 "$rootfs/root/.config/river/init" 2>/dev/null || true
+  cat > "$rootfs/home/emo/.profile" <<'PROFILE'
+export PATH="/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+export HOME=/home/emo
+[ -f ~/.bashrc ] && . ~/.bashrc
+PROFILE
+  cat > "$rootfs/home/emo/.bashrc" <<'BASHRC'
+export PS1='emo@qos:~$ '
+export LANG=C.UTF-8
+export CHARSET=UTF-8
+BASHRC
+  chown -R 1000:1000 "$rootfs/home/emo"
+  chmod 0644 "$rootfs/home/emo/.profile" "$rootfs/home/emo/.bashrc"
+fi
+
+# Always sync river init so updates to root's config propagate to emo's home
+if [[ -f "$rootfs/root/.config/river/init" ]]; then
+  mkdir -p "$rootfs/home/emo/.config/river"
+  cp "$rootfs/root/.config/river/init" "$rootfs/home/emo/.config/river/init"
+  chmod 0755 "$rootfs/home/emo/.config/river/init"
+  chown 1000:1000 "$rootfs/home/emo/.config/river/init"
 fi
 
 if [[ -x "$rootfs/usr/bin/dbus-daemon" ]] || [[ -x "$rootfs/usr/sbin/dbus-daemon" ]]; then

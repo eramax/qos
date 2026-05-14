@@ -109,6 +109,12 @@ if [ -n "\$state_dev" ]; then
     overlay_ok=yes
     mkdir -p /state/var /sysroot/var
     mount --bind /state/var /sysroot/var
+    mkdir -p /state/home /sysroot/home
+    mount --bind /state/home /sysroot/home
+    # Seed emo home from rootfs on first boot
+    if [ ! -d /state/home/emo ] && [ -d /ro-root/home/emo ]; then
+      cp -a /ro-root/home/emo /state/home/emo
+    fi
     # Fix ownership: rootfs was built by a non-root user; correct
     # critical paths so login, dropbear, and apk work inside the VM.
     chown 0:0 /sysroot/root
@@ -144,11 +150,19 @@ if [ -w /sysroot/sys/fs/cgroup/cgroup.subtree_control ]; then
 fi
 mount -t devtmpfs devtmpfs /sysroot/dev
 mkdir -p /sysroot/dev/pts
-mount -t devpts devpts /sysroot/dev/pts
+mount -t devpts devpts /sysroot/dev/pts -o gid=5,mode=620,ptmxmode=666
 mkdir -p /sysroot/dev/shm
 mount -t tmpfs tmpfs -o nosuid,nodev,noexec /sysroot/dev/shm
 mount -t tmpfs tmpfs /sysroot/run
 mount -t tmpfs tmpfs -o nosuid,nodev,mode=1777 /sysroot/tmp
+
+# Fix setuid binaries and sensitive files that lose correct ownership
+# when the rootfs is built by a non-root user.
+chown 0:0 /sysroot/usr/bin/sudo 2>/dev/null && chmod 4755 /sysroot/usr/bin/sudo 2>/dev/null || true
+chown 0:0 /sysroot/usr/bin/su 2>/dev/null && chmod 4755 /sysroot/usr/bin/su 2>/dev/null || true
+chown 0:0 /sysroot/etc/sudo.conf /sysroot/etc/sudoers.d 2>/dev/null || true
+chown 0:0 /sysroot/etc/sudoers 2>/dev/null && chmod 0440 /sysroot/etc/sudoers 2>/dev/null || true
+chown 0:0 /sysroot/var/lib/sudo 2>/dev/null || true
 
 echo "[initramfs] switching to /sbin/init"
 exec switch_root /sysroot /sbin/init

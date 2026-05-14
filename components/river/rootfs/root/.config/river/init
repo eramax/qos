@@ -1,9 +1,14 @@
 #!/bin/sh
-export XDG_RUNTIME_DIR=/run/user/0
-export WAYLAND_DISPLAY=wayland-1
-export DISPLAY=:0
+export XDG_RUNTIME_DIR=/run/user/1000
 
-# Detect and configure output - try common QEMU virtio-gpu output names
+# Wait for river's Wayland socket to be ready before running riverctl
+_n=0
+while [ "$_n" -lt 20 ]; do
+  riverctl list-outputs 2>/dev/null && break
+  sleep 0.2
+  _n=$((_n + 1))
+done
+
 for output in Virtual-1 HDMI-1 DP-1; do
   if riverctl output "$output" mode 1920x1080@60 2>/dev/null; then
     riverctl output "$output" position 0 0
@@ -15,27 +20,14 @@ riverctl keyboard-layout -options "" us
 
 riverctl map normal Super Q close
 riverctl map normal Super+Shift E exit
-
-riverctl map normal Super Return spawn "foot --login-shell" >/dev/null 2>&1
-riverctl map normal Super C spawn "chromium \
-  --ozone-platform=wayland \
-  --no-sandbox \
-  --test-type \
-  --enable-gpu-rasterization \
-  --enable-zero-copy \
-  --enable-features=SharedArrayBuffer,WebAssembly,OffscreenCanvasGetContext,VaapiVideoDecoder \
-  --max-frame-rate=60 \
-  --disable-background-timer-throttling \
-  --disable-breakpad \
-  --disable-default-apps \
-  --no-service-autorun" >/dev/null 2>&1
-riverctl map normal Super S spawn "foot --login-shell" >/dev/null 2>&1
+riverctl map normal Super Return spawn foot
+riverctl map normal Super S spawn foot
+riverctl map normal Super C spawn chromium
 
 riverctl map normal Super J focus-view next
 riverctl map normal Super K focus-view previous
 riverctl map normal Super+Shift J swap next
 riverctl map normal Super+Shift K swap previous
-
 riverctl map normal Super H focus-column left
 riverctl map normal Super L focus-column right
 riverctl map normal Super+Shift H move left
@@ -57,32 +49,17 @@ riverctl map normal Super Period focus-output next
 riverctl map normal Super Comma focus-output previous
 riverctl map normal Super+Shift Period send-to-output next
 riverctl map normal Super+Shift Comma send-to-output previous
-
 riverctl map normal Super+Shift Return zoom
-
 riverctl map normal Super Space toggle-float
 riverctl map normal Super F toggle-fullscreen
-
 riverctl map-pointer normal Super BTN_LEFT move-view
 riverctl map-pointer normal Super BTN_RIGHT resize-view
 riverctl map-pointer normal Super BTN_MIDDLE toggle-float
 
 riverctl default-layout rivertile
-rivertile -view-padding 6 -outer-padding 6 >/dev/null 2>&1 &
+rivertile -view-padding 6 -outer-padding 6 &
 
 sleep 2
-qos-start-vboxclient >/dev/null 2>&1 &
+qos-start-vboxclient &
 
-chromium \
-  --ozone-platform=wayland \
-  --no-sandbox \
-  --test-type \
-  --enable-gpu-rasterization \
-  --enable-zero-copy \
-  --disable-background-timer-throttling \
-  --disable-breakpad \
-  --disable-default-apps \
-  --no-service-autorun \
-  >/dev/null 2>&1 &
-
-
+chromium &

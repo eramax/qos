@@ -1,7 +1,6 @@
 #!/bin/sh
 set -eu
 
-chmod 666 /dev/null 2>/dev/null || true
 chmod 666 /run/seatd.sock 2>/dev/null || true
 
 LOG="/run/qos/river.log"
@@ -30,7 +29,6 @@ log "waiting for /dev/dri/card0 ..."
 _n=0; while [ ! -e /dev/dri/card0 ] && [ "$_n" -lt 60 ]; do sleep 0.25; _n=$((_n+1)); done
 if [ ! -e /dev/dri/card0 ]; then
   log "FATAL: /dev/dri/card0 not found after 15s"
-  log "ls /dev/dri: $(ls /dev/dri 2>/dev/null || echo '(empty)')"
   exit 1
 fi
 log "/dev/dri/card0 found"
@@ -44,28 +42,35 @@ if [ -e /dev/input/event0 ]; then
   udevadm settle 2>/dev/null || true
   sleep 0.5
 else
-  log "WARN: /dev/input/event0 not found after 30s, retrying with WLR_LIBINPUT_NO_DEVICES=1"
+  log "WARN: /dev/input/event0 not found after 30s"
   export WLR_LIBINPUT_NO_DEVICES=1
 fi
 
-export LANG="${LANG:-C.UTF-8}"
-export CHARSET="${CHARSET:-UTF-8}"
-export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
-export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-/root/.config}"
-export XDG_SESSION_TYPE=wayland
-export XDG_VTNR=1
-export LIBSEAT_BACKEND="${LIBSEAT_BACKEND:-seatd}"
-export WLR_DRM_NO_MODIFIERS=1
-export WLR_EGL_NO_MODIFIERS=1
-export WLR_RENDERER=pixman
-mkdir -p "$XDG_RUNTIME_DIR" 2>/dev/null || true
-chown "$(id -u):$(id -g)" "$XDG_RUNTIME_DIR" 2>/dev/null || true
-chmod 0700 "$XDG_RUNTIME_DIR" 2>/dev/null || true
-
-chmod +x "${XDG_CONFIG_HOME}/river/init" 2>/dev/null || true
+# Set up emo's XDG runtime dir as root before switching users
+mkdir -p /run/user/1000
+chown 1000:1000 /run/user/1000
+chmod 0700 /run/user/1000
 
 amixer set Master 100% unmute 2>/dev/null || true
 amixer set PCM 100% unmute 2>/dev/null || true
 
-log "starting river (renderer=pixman, seatd) ..."
-exec river 2>>"$LOG"
+log "starting river as emo (renderer=pixman, seatd) ..."
+
+export LANG=C.UTF-8
+export CHARSET=UTF-8
+export XDG_RUNTIME_DIR=/run/user/1000
+export XDG_CONFIG_HOME=/home/emo/.config
+export XDG_SESSION_TYPE=wayland
+export XDG_VTNR=1
+export LIBSEAT_BACKEND=seatd
+export WLR_DRM_NO_MODIFIERS=1
+export WLR_EGL_NO_MODIFIERS=1
+export WLR_RENDERER=pixman
+export HOME=/home/emo
+export USER=emo
+
+# Fix /dev/null permissions after udev settle so emo/XWayland can use it
+chmod 666 /dev/null /dev/random /dev/urandom /dev/ptmx 2>/dev/null || true
+mount -o remount,ptmxmode=666 /dev/pts 2>/dev/null || true
+
+exec su -m emo -c river 2>>"$LOG"

@@ -1,8 +1,10 @@
 # Root is mounted read-only from the active slot and the state partition is
-# mounted at /var for persistent logs, apk cache, and slot state. The
-# initramfs may later layer overlayfs on top, but the on-disk image contract
+# mounted at /var for persistent logs, apk cache, and slot state.
+# /home is also mounted from state for persistent user homes.
+# The initramfs may later layer overlayfs on top, but the on-disk image contract
 # still includes the base mounts expected by the installer and tests.
 /dev/disk/by-label/qos-root-a / ext4 ro,errors=remount-ro 0 1
 /dev/disk/by-label/qos-state /var ext4 rw,errors=remount-ro 0 2
+/dev/disk/by-label/qos-state /home ext4 rw,errors=remount-ro 0 2
 tmpfs /run tmpfs rw,nosuid,nodev,mode=0755 0 0
 tmpfs /tmp tmpfs rw,nosuid,nodev,mode=1777 0 0
