@@ -1,0 +1,10 @@
+#!/bin/sh
+set -eu
+
+mkdir -p /var/log
+
+# -n: no fork (required for s6 supervision)
+# -O: output file
+# -s: rotate at 512 KB
+# -b: keep 3 rotated files
+exec /sbin/syslogd -n -O /var/log/messages -s 512 -b 3

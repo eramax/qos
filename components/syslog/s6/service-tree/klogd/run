@@ -1,0 +1,14 @@
+#!/bin/sh
+set -eu
+
+# Wait for syslogd socket to be ready
+_n=0
+while [ "$_n" -lt 20 ]; do
+  [ -S /dev/log ] && break
+  sleep 0.5
+  _n=$((_n+1))
+done
+
+# -n: no fork (required for s6 supervision)
+# -c 3: only errors and worse to console
+exec /sbin/klogd -n -c 3

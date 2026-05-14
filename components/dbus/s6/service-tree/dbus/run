@@ -5,11 +5,7 @@ mkdir -p /run/dbus /var/run/dbus
 rm -f /run/dbus/dbus.pid /var/run/dbus/pid
 
 for bin in /usr/bin/dbus-daemon /usr/sbin/dbus-daemon /bin/dbus-daemon; do
-  [ -x "$bin" ] && {
-    # Run dbus with --nofork to prevent backgrounding
-    # and --print-address to show the bus address
-    exec "$bin" --system --nofork --print-address=stdout
-  }
+  [ -x "$bin" ] && exec "$bin" --system --nofork
 done
 
 echo "dbus: binary not found" >&2

@@ -21,3 +21,4 @@ components:
   - capabilities
   - qos-banner
   - qos
+  - syslog

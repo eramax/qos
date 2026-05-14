@@ -116,7 +116,8 @@ VBoxManage storageattach "$VM_NAME" \
 VBoxManage storagectl "$VM_NAME" \
   --name       "SATA Controller" \
   --add        sata \
-  --controller IntelAhci
+  --controller IntelAhci \
+  --portcount  1
 
 VDI_PATH="$VM_DIR/qos.vdi"
 if [ ! -f "$VDI_PATH" ]; then
