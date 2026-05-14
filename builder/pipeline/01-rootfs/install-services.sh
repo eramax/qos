@@ -227,47 +227,7 @@ chmod -R u+w "$s6_current_dir" 2>/dev/null || true
 rm -rf "$s6_current_dir"
 cp -a "$maker_stage_dir" "$s6_current_dir"
 
-# Compile s6-rc database.
-# Standard path for s6-rc-init fallback is /etc/s6-rc/compiled.
-compiled_dir="$etc_dir/s6-rc/compiled"
-s6_rc_src="$etc_dir/s6/s6-rc.d"
-service_tree="$etc_dir/s6/service-tree"
-rm -rf "$compiled_dir"
-mkdir -p "$etc_dir/s6-rc"
 
-# s6-rc-compile requires 'run' scripts to be in the source dir for longruns.
-for d in "$s6_rc_src"/*; do
-  [ -d "$d" ] || continue
-  name="${d##*/}"
-  if [ -f "$d/type" ] && [ "$(cat "$d/type")" = "longrun" ]; then
-    if [ -f "$service_tree/$name/run" ]; then
-      ln -sf "../../service-tree/$name/run" "$d/run"
-    fi
-  fi
-done
-
-LD_LIBRARY_PATH="$rootfs/lib:$rootfs/usr/lib" \
-  "$maker_loader" "$rootfs/usr/bin/s6-rc-compile" \
-  "$compiled_dir" "$s6_rc_src" >/dev/null
-
-# Create a 'default' bundle that includes ALL services if it doesn't exist.
-# We do this after the first compile to find all available services.
-if [ ! -d "$s6_rc_src/default" ]; then
-  mkdir -p "$s6_rc_src/default"
-  echo "bundle" > "$s6_rc_src/default/type"
-  rm -f "$s6_rc_src/default/contents"
-  for d in "$s6_rc_src"/*; do
-    [ -d "$d" ] || continue
-    name="${d##*/}"
-    [ "$name" = "default" ] && continue
-    echo "$name" >> "$s6_rc_src/default/contents"
-  done
-  # Re-compile with the new default bundle.
-  rm -rf "$compiled_dir"
-  LD_LIBRARY_PATH="$rootfs/lib:$rootfs/usr/lib" \
-    "$maker_loader" "$rootfs/usr/bin/s6-rc-compile" \
-    "$compiled_dir" "$s6_rc_src" >/dev/null
-fi
 
 cat > "$s6_current_dir/scripts/rc.init" <<'EOF'
 #!/bin/sh
