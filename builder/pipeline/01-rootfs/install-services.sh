@@ -72,6 +72,7 @@ if ! grep -q '^emo:' "$etc_dir/passwd" 2>/dev/null; then
   echo 'emo:x:1000:emo' >> "$etc_dir/group"
   sed -i '/^video:/s/$/,emo/' "$etc_dir/group" 2>/dev/null || echo 'video:x:27:emo' >> "$etc_dir/group"
   sed -i '/^input:/s/$/,emo/' "$etc_dir/group" 2>/dev/null || echo 'input:x:28:emo' >> "$etc_dir/group"
+  sed -i '/^audio:/s/$/,emo/' "$etc_dir/group" 2>/dev/null || echo 'audio:x:29:emo' >> "$etc_dir/group"
   sed -i '/^wheel:/s/$/,emo/' "$etc_dir/group" 2>/dev/null || echo 'wheel:x:10:emo' >> "$etc_dir/group"
   chmod u+w "$etc_dir/sudoers" 2>/dev/null || true
   echo '%wheel ALL=(ALL) ALL' >> "$etc_dir/sudoers"

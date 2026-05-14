@@ -87,3 +87,14 @@ The `Containerfile` defines an Alpine 3.23-based build container. Run builds ins
 - The target shell is busybox `ash` — avoid bashisms in rootfs scripts.
 - Kernel is UEFI-only; no BIOS/MBR support.
 - The build cache is keyed on profile + package hash; editing `component.yaml` packages invalidates it.
+
+## Testing & Debugging
+
+### VirtualBox SSH Access
+
+To test changes on a running VirtualBox VM with NAT networking:
+```sh
+sshpass -p root ssh -p 2222 root@localhost "command"
+```
+
+Port 2222 is the forwarded SSH port from the VM's NAT network. Root password is `root`. This allows verification of runtime behavior without rebuilding.

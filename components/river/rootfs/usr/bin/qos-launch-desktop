@@ -74,5 +74,13 @@ chmod 666 /dev/null /dev/random /dev/urandom /dev/ptmx 2>/dev/null || true
 mount -o remount,ptmxmode=666 /dev/pts 2>/dev/null || true
 # Give video group access to DRI devices (udevd sets root:root instead of root:video)
 chgrp video /dev/dri/card0 /dev/dri/renderD128 2>/dev/null || true
+# Give audio group access to sound devices for pipewire
+chgrp audio /dev/snd/* 2>/dev/null || true
+chmod g+rw /dev/snd/* 2>/dev/null || true
 
-exec su -m emo -c river 2>>"$LOG"
+# Stop root pipewire so emo's instance can take over
+pkill -f '^/usr/bin/pipewire' 2>/dev/null || true
+pkill -f '^/usr/bin/pipewire-pulse' 2>/dev/null || true
+sleep 0.5
+
+exec su -m emo -c 'pipewire & pipewire-pulse & exec river' 2>>"$LOG"
