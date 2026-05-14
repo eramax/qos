@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Collaboration Guidelines
+
+**Do not commit changes without explicit approval.** Always present changes for review first and wait for confirmation before creating commits. This applies to all code changes, documentation updates, and configuration modifications.
+
 ## Project Overview
 
 QOS is a minimal, reproducible Linux distribution built on Alpine Linux with a custom kernel, s6 init, overlayfs immutable root, and UEFI-only Limine bootloader. It targets sub-64MB ISOs and sub-40MB RAM at runtime. The build system is a 6-stage modular pipeline driven by YAML profiles and modular components.
