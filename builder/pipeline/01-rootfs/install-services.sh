@@ -158,9 +158,12 @@ chmod 0444 "$etc_dir/qos/version"
 printf '%s\n' 'installed-disk' > "$etc_dir/qos/boot-source"
 chmod 0444 "$etc_dir/qos/boot-source"
 
-if [[ -f "$dropbear_keys_file" ]]; then
-  install -m 0600 "$dropbear_keys_file" "$rootfs/root/.ssh/authorized_keys"
-fi
+# Note: authorized_keys restricts root to key-only auth.
+# For password authentication to work, don't install it.
+# Users can manually add keys to /root/.ssh/authorized_keys if desired.
+# if [[ -f "$dropbear_keys_file" ]]; then
+#   install -m 0600 "$dropbear_keys_file" "$rootfs/root/.ssh/authorized_keys"
+# fi
 printf 'QOS\n' > "$etc_dir/motd"
 chmod 0444 "$etc_dir/motd"
 
