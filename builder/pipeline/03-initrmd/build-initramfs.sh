@@ -164,6 +164,10 @@ chown 0:0 /sysroot/etc/sudo.conf /sysroot/etc/sudoers.d 2>/dev/null || true
 chown 0:0 /sysroot/etc/sudoers 2>/dev/null && chmod 0440 /sysroot/etc/sudoers 2>/dev/null || true
 chown 0:0 /sysroot/var/lib/sudo 2>/dev/null || true
 
+# Stamp boot-source so stale live-cdrom values from overlay don't persist
+mkdir -p /sysroot/etc/qos 2>/dev/null || true
+printf 'installed-disk\n' > /sysroot/etc/qos/boot-source 2>/dev/null || true
+
 echo "[initramfs] switching to /sbin/init"
 exec switch_root /sysroot /sbin/init
 EOF

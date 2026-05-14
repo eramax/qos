@@ -183,6 +183,13 @@ chmod 666 /sysroot/dev/null 2>/dev/null || true
 mount -t tmpfs tmpfs /sysroot/run
 mount -t tmpfs tmpfs /sysroot/tmp -o nosuid,nodev,mode=1777 2>/dev/null || true
 
+# Fix setuid binaries and ownership lost when rootfs is built as non-root
+chown 0:0 /sysroot/usr/bin/sudo 2>/dev/null && chmod 4755 /sysroot/usr/bin/sudo 2>/dev/null || true
+chown 0:0 /sysroot/usr/bin/su 2>/dev/null && chmod 4755 /sysroot/usr/bin/su 2>/dev/null || true
+chown 0:0 /sysroot/etc/sudo.conf /sysroot/etc/sudoers.d 2>/dev/null || true
+chown 0:0 /sysroot/etc/sudoers 2>/dev/null && chmod 0440 /sysroot/etc/sudoers 2>/dev/null || true
+chown 0:0 /sysroot/var/lib/sudo 2>/dev/null || true
+
 echo "[live-init] Switching to live rootfs..."
 exec switch_root /sysroot /sbin/init
 LIVE_INIT
@@ -236,7 +243,7 @@ interface_branding_colour: 6
     protocol: linux
     kernel_path: boot():/vmlinuz
     module_path: boot():/initramfs-live.img
-    cmdline: rdinit=/init cloud-init=off video=Virtual-1:1920x1080@60 console=tty0 console=ttyS0,115200n8 earlycon=uart,io,0x3f8,115200n8 loglevel=7 net.ifnames=0 biosdevname=0
+    cmdline: rdinit=/init cloud-init=off qos.live=1 video=Virtual-1:1920x1080@60 console=tty0 console=ttyS0,115200n8 earlycon=uart,io,0x3f8,115200n8 loglevel=7 net.ifnames=0 biosdevname=0
 EOF
 mcopy -i "$esp_img" "$iso_build_dir/limine-live.conf" ::/limine.conf
 mcopy -i "$esp_img" "$boot_dir/vmlinuz"               ::/vmlinuz
@@ -253,6 +260,13 @@ mkdir -p "$iso_root"
 # Put the ESP image at the ISO root; xorriso uses it as the EFI boot entry.
 cp "$esp_img" "$iso_root/efi.img"
 cp "$rootfs_sfs" "$iso_root/rootfs.sfs"
+
+# Copy BOOTX64.EFI into the ISO filesystem at /EFI/BOOT/ so OVMF can find
+# it when scanning the optical drive as a filesystem (avoids skipping the
+# optical in favour of the NVRAM disk entry).
+mkdir -p "$iso_root/EFI/BOOT"
+mcopy -i "$esp_img" ::BOOTX64.EFI "$iso_root/EFI/BOOT/BOOTX64.EFI" 2>/dev/null || \
+  cp "$limine_efi" "$iso_root/EFI/BOOT/BOOTX64.EFI"
 
 echo "Creating ISO..."
 xorriso -as mkisofs \
