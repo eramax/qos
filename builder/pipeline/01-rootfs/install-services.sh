@@ -130,24 +130,8 @@ find "$etc_dir/profile.d" -type f -name '*.sh' -exec chmod 0755 {} \;
 find "$rootfs/usr/bin" -type f -name 'qos-autologin-*' -exec chmod 0755 {} \;
 mkdir -p "$etc_dir/qos"
 printf '%s\n' "$qos_profile" > "$etc_dir/qos/profile"
-if [[ -f "$etc_dir/cloud/cloud.cfg" ]]; then
-  tmp_cloud_cfg="$etc_dir/cloud/cloud.cfg.tmp"
-  awk '
-    BEGIN { replaced = 0 }
-    /^[[:space:]]*datasource_list:/ {
-      print "datasource_list: [ ConfigDrive, NoCloud, None ]"
-      replaced = 1
-      next
-    }
-    { print }
-    END {
-      if (!replaced) {
-        print "datasource_list: [ ConfigDrive, NoCloud, None ]"
-      }
-    }
-  ' "$etc_dir/cloud/cloud.cfg" > "$tmp_cloud_cfg"
-  mv "$tmp_cloud_cfg" "$etc_dir/cloud/cloud.cfg"
-fi
+# Note: cloud.cfg is already correctly configured by the cloud-init component.
+# Don't revert it here. The component includes proper datasource_list with EC2 support.
 rm -f "$etc_dir/cloud/cloud.cfg.d/05_qos-cloud-init.cfg"
 if [[ -n "${QOS_BUILD_VERSION:-}" ]]; then
   printf '%s\n' "$QOS_BUILD_VERSION" > "$etc_dir/qos/version"
