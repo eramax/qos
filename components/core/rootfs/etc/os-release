@@ -1,0 +1,8 @@
+NAME="QOS"
+VERSION="1.0"
+ID=alpine
+ID_LIKE=alpine
+VERSION_ID=1.0
+PRETTY_NAME="QOS Linux 1.0"
+HOME_URL="https://github.com/eramax/qos"
+BUG_REPORT_URL="https://github.com/eramax/qos/issues"
