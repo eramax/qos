@@ -9,6 +9,7 @@ packages:
   - tzdata
   - curl
   - iproute2
+  - sudo
   - execline
   - s6-linux-init
   - s6-portable-utils

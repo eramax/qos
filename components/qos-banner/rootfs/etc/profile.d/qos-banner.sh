@@ -1,6 +1,5 @@
 #!/bin/sh
 
-chmod 666 /dev/null 2>&1 || true
 
 # Only print for interactive shells unless a test explicitly forces it.
 case "$-" in
