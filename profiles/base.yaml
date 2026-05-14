@@ -1,7 +1,14 @@
 name: base
 kernel:
   base_config: components/kernel/kernel/x86_64.config
-  fragments: []
+  fragments:
+    - components/core/kernel/core.conf
+    - components/core/kernel/storage.conf
+    - components/core/kernel/system.conf
+    - components/core/kernel/crypto.conf
+    - components/networking/kernel/networking.conf
+    - components/zram/kernel/zram.conf
+    - components/console/kernel/serial.conf
 qemu:
   command: QOS_PROFILE=base QEMU_DISPLAY=none QEMU_MEMORY=1G QEMU_CPUS=2 QEMU_NET_MODE=tap QEMU_BRIDGE_IFACE=br0 QEMU_HOSTFWD_PORT=2222 builder/tools/boot-image.sh --qemu-iso dist/qos-base.iso
 components:
@@ -16,8 +23,6 @@ components:
   - console
   - mdev-coldplug
   - dns
-  - webapp
-  - reverse-proxy
   - capabilities
   - qos-banner
   - qos

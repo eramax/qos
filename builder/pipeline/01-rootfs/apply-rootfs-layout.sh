@@ -64,16 +64,6 @@ mkdir -p "$rootfs/etc/qos"
 install -m 0644 "$root/builder/pipeline/05-image/slots.json" "$rootfs/etc/qos/slots.json"
 install -m 0644 "$root/builder/pipeline/05-image/layout.json" "$rootfs/etc/qos/layout.json"
 
-# Dev/test image: set root password to "root".
-# Must happen before the chmod loop locks /etc to 0555.
-# awk is used instead of sed so the $6$... hash is not mis-expanded.
-if [[ -f "$rootfs/etc/shadow" ]]; then
-  root_pw_hash="$(openssl passwd -6 root)"
-  awk -v pw="$root_pw_hash" 'BEGIN{FS=OFS=":"} $1=="root"{$2=pw}1' \
-    "$rootfs/etc/shadow" > "$rootfs/etc/shadow.tmp"
-  mv "$rootfs/etc/shadow.tmp" "$rootfs/etc/shadow"
-fi
-
 while IFS= read -r path; do
   [[ -n "$path" && "${path#\#}" == "$path" ]] || continue
   [[ "$path" == /* ]] || die "rootfs path manifest must use absolute paths: $path"

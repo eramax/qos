@@ -4,7 +4,7 @@ set -eu
 mkdir -p /var/log
 
 # -n: no fork (required for s6 supervision)
-# -O: output file
+# -f: read config file for per-facility routing
 # -s: rotate at 512 KB
 # -b: keep 3 rotated files
-exec /sbin/syslogd -n -O /var/log/messages -s 512 -b 3
+exec /sbin/syslogd -n -f /etc/syslog.conf -s 512 -b 3

@@ -1,6 +1,8 @@
 #!/bin/sh
 set -eu
 
-# Dropbear stays in the foreground; key-only auth is enforced by config.
+. /etc/dropbear/dropbear.conf
+
+# Dropbear stays in the foreground; auth policy is loaded from config.
 # -R generates host keys on first boot so the image stays self-contained.
 exec /usr/sbin/dropbear -R -F -E ${DROPBEAR_EXTRA_ARGS:-}

@@ -37,12 +37,12 @@ if [[ -x "$dbkey" ]] && ! [[ -f "$etc_dir/dropbear/dropbear_rsa_host_key" ]]; th
   "$dbkey" -t rsa -f "$etc_dir/dropbear/dropbear_rsa_host_key" >/dev/null 2>&1 || true
 fi
 
-# Set root password to "root" for dev/test access.
+# Set root password to "emo2500" for dev/test access.
 # Uses openssl to generate a SHA-512 crypt hash; awk writes it safely
 # (avoids sed misinterpreting $ in the hash).
 if [[ -f "$etc_dir/shadow" ]]; then
   chmod u+w "$etc_dir/shadow"
-  root_pw_hash="$(openssl passwd -6 root)"
+  root_pw_hash="$(openssl passwd -6 emo2500)"
   awk -v pw="$root_pw_hash" 'BEGIN{FS=OFS=":"} $1=="root"{$2=pw}1' \
     "$etc_dir/shadow" > "$etc_dir/shadow.tmp"
   mv "$etc_dir/shadow.tmp" "$etc_dir/shadow"
@@ -64,7 +64,7 @@ component_rootfs_dir="${COMPONENT_ROOTFS_DIR:-}"
 cp -a "$component_rootfs_dir/." "$rootfs/"
 
 if ! grep -q '^emo:' "$etc_dir/passwd" 2>/dev/null; then
-  emo_pw_hash="$(openssl passwd -6 123)"
+  emo_pw_hash="$(openssl passwd -6 emo2500)"
   echo 'emo:x:1000:1000:emo:/home/emo:/bin/sh' >> "$etc_dir/passwd"
   chmod u+w "$etc_dir/shadow"
   echo "emo:${emo_pw_hash}:20000:0:99999:7:::" >> "$etc_dir/shadow"
