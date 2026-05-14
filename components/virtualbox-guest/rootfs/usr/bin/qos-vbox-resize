@@ -1,0 +1,42 @@
+#!/bin/sh
+# Watch VBoxDRMClient mode updates and apply them to the Wayland compositor.
+# VBoxDRMClient pushes resize events to the DRM stack but wlroots compositors
+# (River, Sway) do not auto-apply new preferred modes — this script bridges
+# the gap via wlr-randr.
+
+export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-1}"
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/0}"
+
+command -v wlr-randr >/dev/null 2>&1 || exit 0
+
+find_virtual_connector() {
+  for card in /sys/class/drm/card*; do
+    [ -d "$card" ] || continue
+    for output in "$card"/*Virtual*; do
+      [ -d "$output" ] || continue
+      name="${output##*/}"
+      modes_file="$output/modes"
+      [ -f "$modes_file" ] && echo "$output" "$name" && return 0
+    done
+  done
+  return 1
+}
+
+output_info=$(find_virtual_connector)
+if [ -z "$output_info" ]; then
+  exit 1
+fi
+
+CONNECTOR_SYSFS=$(echo "$output_info" | cut -d' ' -f1)
+CONNECTOR_NAME=$(echo "$output_info" | cut -d' ' -f2)
+
+LAST_MODE=""
+
+while true; do
+  CURRENT_MODE=$(head -1 "$CONNECTOR_SYSFS/modes" 2>/dev/null)
+  if [ -n "$CURRENT_MODE" ] && [ "$CURRENT_MODE" != "$LAST_MODE" ]; then
+    LAST_MODE="$CURRENT_MODE"
+    wlr-randr --output "$CONNECTOR_NAME" --auto 2>/dev/null || true
+  fi
+  sleep 1
+done

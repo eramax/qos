@@ -1,9 +1,7 @@
 #!/bin/sh
 export XDG_RUNTIME_DIR=/run/user/0
 export WAYLAND_DISPLAY=wayland-1
-
-# Redirect stdout/stderr to suppress "Invalid file descriptor" errors
-exec 2>/dev/null
+export DISPLAY=:0
 
 # Detect and configure output - try common QEMU virtio-gpu output names
 for output in Virtual-1 HDMI-1 DP-1; do
@@ -73,10 +71,7 @@ riverctl default-layout rivertile
 rivertile -view-padding 6 -outer-padding 6 >/dev/null 2>&1 &
 
 sleep 2
-VBoxClient --clipboard >/dev/null 2>&1 &
-VBoxClient --draganddrop >/dev/null 2>&1 &
-VBoxClient --vmsvga >/dev/null 2>&1 &
-VBoxClient --vmsvga-session >/dev/null 2>&1 &
+qos-start-vboxclient >/dev/null 2>&1 &
 
 chromium \
   --ozone-platform=wayland \

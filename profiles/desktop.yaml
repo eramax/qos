@@ -18,3 +18,4 @@ components:
   - gpu-open-source
   - chromium
   - desktop-user
+  - virtualbox-guest

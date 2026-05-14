@@ -134,6 +134,9 @@ VBoxManage storageattach "$VM_NAME" \
   --type       hdd \
   --medium     "$VDI_PATH"
 
+# ── 13. GUI preferences ───────────────────────────────────────────────────────
+VBoxManage setextradata "$VM_NAME" "GUI/AutoresizeGuest" 1
+
 echo ""
 echo "VM '$VM_NAME' created successfully."
 echo "Start with:  VBoxManage startvm '$VM_NAME' --type gui"

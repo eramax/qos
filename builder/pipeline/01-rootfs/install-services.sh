@@ -147,6 +147,11 @@ chmod 0444 "$etc_dir/motd"
 chmod u+w "$rootfs/usr/bin" 2>/dev/null || true
 ln -sfn /bin/busybox "$rootfs/usr/bin/env"
 
+# VBoxService looks for VBoxDRMClient at /usr/bin/; Alpine installs it to /usr/sbin/.
+if [[ -x "$rootfs/usr/sbin/VBoxDRMClient" ]]; then
+  ln -sfn /usr/sbin/VBoxDRMClient "$rootfs/usr/bin/VBoxDRMClient"
+fi
+
 # Ensure a udhcpc default script exists so that a granted DHCP lease actually
 # configures the interface.  Alpine's busybox package usually ships this file,
 # but provide a fallback in case --no-scripts leaves it out.

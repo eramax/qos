@@ -1,0 +1,31 @@
+#!/bin/sh
+# Start VBoxClient services for a Wayland compositor session.
+# Called from the compositor init (e.g. river/init) after the display is up.
+# Safe to call when VirtualBox guest additions are not installed: all execs are guarded.
+
+command -v VBoxClient >/dev/null 2>&1 || exit 0
+
+export DISPLAY="${DISPLAY:-:0}"
+export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-1}"
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/0}"
+
+# Wait for VBoxService to populate /run/VBoxDRMClient socket
+_max_wait=60
+_n=0
+while [ ! -S /run/VBoxDRMClient ] && [ "$_n" -lt "$_max_wait" ]; do
+  sleep 0.5
+  _n=$((_n+1))
+done
+
+# Wait for XWayland socket (needed for X11 clipboard via wl_registry)
+_n=0
+while [ ! -S "$XDG_RUNTIME_DIR/X11-0" ] && [ "$_n" -lt 40 ]; do
+  sleep 0.5
+  _n=$((_n+1))
+done
+
+VBoxClient --clipboard --nodaemon 2>/dev/null &
+VBoxClient --draganddrop --nodaemon 2>/dev/null &
+VBoxClient --vmsvga-session --nodaemon 2>/dev/null &
+
+qos-vbox-resize 2>/dev/null &

@@ -1,0 +1,6 @@
+name: virtualbox-guest
+packages:
+  - virtualbox-guest-additions
+  - virtualbox-guest-additions-udev
+  - virtualbox-guest-additions-x11
+  - wlr-randr
