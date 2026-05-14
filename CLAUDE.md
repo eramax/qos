@@ -98,3 +98,31 @@ sshpass -p root ssh -p 2222 root@localhost "command"
 ```
 
 Port 2222 is the forwarded SSH port from the VM's NAT network. Root password is `root`. This allows verification of runtime behavior without rebuilding.
+
+## Multi-User Desktop
+
+The `qos-launch-desktop` script now supports any user (not just hardcoded emo):
+
+```sh
+# Start desktop for the default user (emo)
+qos-launch-desktop
+
+# Start desktop for a specific user
+qos-launch-desktop username
+
+# Or set via environment
+QOS_DESKTOP_USER=alice qos-launch-desktop
+```
+
+When adding a new desktop user, ensure they are in these groups:
+- `audio` — access to `/dev/snd/*` for pipewire
+- `video` — access to `/dev/dri/*` for graphics
+- `input` — access to input devices via seatd
+
+Example to add user `alice` with desktop access:
+```sh
+adduser -D -h /home/alice -s /bin/sh alice
+addgroup alice audio
+addgroup alice video
+addgroup alice input
+```
