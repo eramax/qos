@@ -81,6 +81,7 @@ chmod g+rw /dev/snd/* 2>/dev/null || true
 # Stop root pipewire so emo's instance can take over
 pkill -f '^/usr/bin/pipewire' 2>/dev/null || true
 pkill -f '^/usr/bin/pipewire-pulse' 2>/dev/null || true
+pkill -f '^/usr/bin/wireplumber' 2>/dev/null || true
 sleep 0.5
 
-exec su -m emo -c 'pipewire & pipewire-pulse & exec river' 2>>"$LOG"
+exec su -m emo -c 'pipewire & sleep 0.5 && wireplumber & pipewire-pulse & exec river' 2>>"$LOG"
