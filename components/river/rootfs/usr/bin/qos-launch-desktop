@@ -69,8 +69,10 @@ export WLR_RENDERER=pixman
 export HOME=/home/emo
 export USER=emo
 
-# Fix /dev/null permissions after udev settle so emo/XWayland can use it
+# Fix device permissions after udev settle so emo can use them
 chmod 666 /dev/null /dev/random /dev/urandom /dev/ptmx 2>/dev/null || true
 mount -o remount,ptmxmode=666 /dev/pts 2>/dev/null || true
+# Give video group access to DRI devices (udevd sets root:root instead of root:video)
+chgrp video /dev/dri/card0 /dev/dri/renderD128 2>/dev/null || true
 
 exec su -m emo -c river 2>>"$LOG"

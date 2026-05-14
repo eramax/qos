@@ -22,3 +22,4 @@ components:
   - qos-banner
   - qos
   - syslog
+  - btop
