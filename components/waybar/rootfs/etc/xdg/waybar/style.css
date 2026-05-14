@@ -1,0 +1,50 @@
+window {
+  background-color: #1e1e2e;
+  color: #cdd6f4;
+  border-top: 3px solid #5294e2;
+  font-family: monospace;
+  font-size: 13px;
+  padding: 5px 10px;
+}
+
+#custom-apps {
+  padding: 5px 12px;
+  margin-right: 10px;
+  border-radius: 5px;
+  background-color: #313244;
+  color: #5294e2;
+}
+
+#custom-apps:hover {
+  background-color: #5294e2;
+  color: #1e1e2e;
+}
+
+#wlr-taskbar button {
+  padding: 5px 15px;
+  margin: 0 5px;
+  border-radius: 5px;
+  background-color: #2d2d40;
+  color: #a6adc8;
+  min-width: 50px;
+}
+
+#wlr-taskbar button:hover {
+  background-color: #45475a;
+  color: #cdd6f4;
+}
+
+#wlr-taskbar button.active {
+  background: linear-gradient(135deg, #5294e2 0%, #7aa2f7 100%);
+  color: #ffffff;
+  font-weight: bold;
+  box-shadow: 0 0 10px rgba(82, 148, 226, 0.5);
+}
+
+#clock {
+  padding: 5px 12px;
+  margin-left: 10px;
+  border-radius: 5px;
+  background-color: #313244;
+  color: #89b4fa;
+}

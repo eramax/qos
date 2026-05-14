@@ -1,0 +1,56 @@
+window {
+  background-color: #1e1e2e;
+  color: #cdd6f4;
+  font-family: "DejaVu Sans", sans-serif;
+  font-size: 14px;
+}
+
+#input {
+  padding: 12px;
+  margin: 8px;
+  background-color: #313244;
+  color: #cdd6f4;
+  border: 1px solid #5294e2;
+  border-radius: 4px;
+}
+
+#input:focus {
+  background-color: #313244;
+  border-color: #5294e2;
+}
+
+#scroll {
+  margin: 0;
+  padding: 0 8px 8px 8px;
+}
+
+#inner-box {
+  padding: 0;
+}
+
+image {
+  margin: 4px;
+}
+
+#entry {
+  padding: 8px;
+  margin: 4px;
+  background-color: #313244;
+  border-radius: 4px;
+  color: #cdd6f4;
+}
+
+#entry:selected {
+  background-color: #5294e2;
+  color: #cdd6f4;
+  border-radius: 4px;
+}
+
+#entry:selected text {
+  color: #cdd6f4;
+}
+
+#text {
+  margin: 4px;
+  color: #cdd6f4;
+}

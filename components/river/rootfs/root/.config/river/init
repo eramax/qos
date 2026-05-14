@@ -18,6 +18,14 @@ done
 
 riverctl keyboard-layout -options "" us
 
+# Set dark theme colors
+riverctl border-color-focused 0x5294e2
+riverctl border-color-unfocused 0x2d3250
+riverctl border-width 2
+
+# Launch waybar with D-Bus session support
+dbus-run-session --dbus-daemon=/usr/bin/dbus-daemon waybar >/dev/null 2>&1 &
+
 riverctl map normal Super Q close
 riverctl map normal Super+Shift E exit
 riverctl map normal Super Return spawn foot

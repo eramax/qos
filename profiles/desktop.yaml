@@ -11,6 +11,8 @@ qemu:
   command: QOS_PROFILE=desktop QEMU_DISPLAY=gtk QEMU_VGA=virtio-gpu-pci QEMU_MEMORY=4G QEMU_CPUS=4 QEMU_NET_MODE=tap QEMU_BRIDGE_IFACE=br0 QEMU_HOSTFWD_PORT=2222 builder/tools/boot-image.sh --qemu-iso dist/qos-desktop.iso
 components:
   - river
+  - waybar
+  - wofi
   - dbus
   - seatd
   - eudev

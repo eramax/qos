@@ -1,0 +1,19 @@
+{
+  "layer": "top",
+  "position": "bottom",
+  "height": 40,
+  "modules-left": ["custom/apps"],
+  "modules-center": ["wlr/taskbar"],
+  "modules-right": ["clock"],
+  "custom/apps": {
+    "format": "Apps",
+    "on-click": "foot &"
+  },
+  "wlr/taskbar": {
+    "format": "{title:.40}",
+    "on-click": "activate"
+  },
+  "clock": {
+    "format": "{:%H:%M}"
+  }
+}

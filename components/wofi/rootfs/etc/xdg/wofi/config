@@ -1,0 +1,9 @@
+width=600
+height=400
+allow_images=true
+always_parse_args=true
+show=drun
+term=foot
+lines=10
+columns=3
+insensitive=true
