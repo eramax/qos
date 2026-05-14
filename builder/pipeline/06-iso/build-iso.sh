@@ -180,12 +180,16 @@ chmod 666 /sysroot/dev/null 2>/dev/null || true
 mount -t tmpfs tmpfs /sysroot/run
 mount -t tmpfs tmpfs /sysroot/tmp -o nosuid,nodev,mode=1777 2>/dev/null || true
 
-# Fix setuid binaries and ownership lost when rootfs is built as non-root
-chown 0:0 /sysroot/usr/bin/sudo 2>/dev/null && chmod 4755 /sysroot/usr/bin/sudo 2>/dev/null || true
-chown 0:0 /sysroot/usr/bin/su 2>/dev/null && chmod 4755 /sysroot/usr/bin/su 2>/dev/null || true
-chown 0:0 /sysroot/etc/sudo.conf /sysroot/etc/sudoers.d 2>/dev/null || true
-chown 0:0 /sysroot/etc/sudoers 2>/dev/null && chmod 0440 /sysroot/etc/sudoers 2>/dev/null || true
-chown 0:0 /sysroot/var/lib/sudo 2>/dev/null || true
+# Fix ownership lost when rootfs is built as non-root.
+# Dropbear requires /root/.ssh to be owned by root.
+echo "[live-init] Fixing rootfs ownership..."
+chown -R 0:0 /sysroot 2>/dev/null || true
+chown -R 1000:1000 /sysroot/home/emo 2>/dev/null || true
+
+# Fix setuid binaries
+chmod 4755 /sysroot/usr/bin/sudo 2>/dev/null || true
+chmod 4755 /sysroot/usr/bin/su 2>/dev/null || true
+chmod 0440 /sysroot/etc/sudoers 2>/dev/null || true
 
 echo "[live-init] Switching to live rootfs..."
 exec switch_root /sysroot /sbin/init
