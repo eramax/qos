@@ -94,6 +94,7 @@ ram-check:
 	@QOS_PROFILE=$(QOS_PROFILE) bash builder/tools/qos-ram-check.sh
 
 resolve-profile:
+	@rm -rf $(ROOT)/build/generated/profiles/$(QOS_PROFILE)
 	@bash builder/resolve.sh stage --profile $(QOS_PROFILE) --out-dir $(ROOT)/build/generated/profiles/$(QOS_PROFILE)
 
 build-log:

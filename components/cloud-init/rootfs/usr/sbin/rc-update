@@ -1,0 +1,5 @@
+#!/bin/sh
+# QOS wrapper to translate OpenRC rc-update for cloud-init
+# QOS uses s6, so services are enabled by default in the service tree.
+# We just return success.
+exit 0

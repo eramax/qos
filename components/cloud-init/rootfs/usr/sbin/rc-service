@@ -1,0 +1,33 @@
+#!/bin/sh
+# QOS wrapper to translate OpenRC rc-service to s6 commands for cloud-init
+
+if [ "$1" = "--nocolor" ]; then
+    shift
+fi
+
+service="$1"
+action="$2"
+
+# Map cloud-init's service names to QOS service names if needed
+case "$service" in
+    sshd) service="dropbear" ;;
+    network) service="networking" ;;
+esac
+
+svc_dir="/run/service/$service"
+
+if [ ! -d "$svc_dir" ]; then
+    # Fallback to true if service doesn't exist, to not break cloud-init
+    exit 0
+fi
+
+case "$action" in
+    start|restart)
+        s6-svc -r "$svc_dir" || s6-svc -u "$svc_dir"
+        ;;
+    stop)
+        s6-svc -d "$svc_dir"
+        ;;
+esac
+
+exit 0

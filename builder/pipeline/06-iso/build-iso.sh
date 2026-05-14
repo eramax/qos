@@ -157,14 +157,11 @@ echo "qos-live" > /proc/sys/kernel/hostname 2>/dev/null
 mkdir -p /sysroot/etc/qos
 echo "live-cdrom" > /sysroot/etc/qos/boot-source
 
-# Fully disable cloud-init on live CD — no cloud datasource is present
-# and its OpenRC-style commands produce noise under s6.  The kernel
-# cmdline cloud-init=off is the canonical disable; we also stamp the
-# file-based override for belt-and-suspenders.
+# Ensure cloud-init is enabled on the live CD so it can configure network and SSH via cloud metadata.
 chmod u+w /sysroot/etc/cloud 2>/dev/null || true
 mkdir -p /sysroot/etc/cloud/cloud.cfg.d
-echo "datasource_list: [ None ]" > /sysroot/etc/cloud/cloud.cfg.d/99-qos-live-disable.cfg
-touch /sysroot/etc/cloud-init.disabled
+rm -f /sysroot/etc/cloud/cloud.cfg.d/99-qos-live-disable.cfg
+rm -f /sysroot/etc/cloud-init.disabled
 
 echo "[live-init] Mounting essential filesystems..."
 mkdir -p /sysroot/sys/fs/cgroup /sysroot/dev/pts
@@ -243,7 +240,7 @@ interface_branding_colour: 6
     protocol: linux
     kernel_path: boot():/vmlinuz
     module_path: boot():/initramfs-live.img
-    cmdline: rdinit=/init cloud-init=off qos.live=1 video=Virtual-1:1920x1080@60 console=tty0 console=ttyS0,115200n8 earlycon=uart,io,0x3f8,115200n8 loglevel=7 net.ifnames=0 biosdevname=0
+    cmdline: rdinit=/init qos.live=1 video=Virtual-1:1920x1080@60 console=tty0 console=ttyS0,115200n8 earlycon=uart,io,0x3f8,115200n8 loglevel=7 net.ifnames=0 biosdevname=0
 EOF
 mcopy -i "$esp_img" "$iso_build_dir/limine-live.conf" ::/limine.conf
 mcopy -i "$esp_img" "$boot_dir/vmlinuz"               ::/vmlinuz

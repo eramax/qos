@@ -56,6 +56,7 @@ mkdir -p "$etc_dir/profile.d" "$etc_dir/qos"
 chmod -R u+w "$etc_dir/qos" 2>/dev/null || mkdir -p "$etc_dir/qos"
 mkdir -p "$etc_dir/qos/capabilities" "$etc_dir/qos/cluster" "$etc_dir/caddy" "$etc_dir/chrony"
 mkdir -p "$rootfs/root/.ssh"
+chmod 0700 "$rootfs/root/.ssh"
 
 qos_profile="${QOS_PROFILE:-server}"
 component_rootfs_dir="${COMPONENT_ROOTFS_DIR:-}"
@@ -164,7 +165,6 @@ fi
 # configures the interface.  Alpine's busybox package usually ships this file,
 # but provide a fallback in case --no-scripts leaves it out.
 udhcpc_script_dir="$rootfs/usr/share/udhcpc"
-if [[ ! -f "$udhcpc_script_dir/default.script" ]]; then
   chmod u+w "$rootfs/usr" "$rootfs/usr/share" 2>/dev/null || true
   mkdir -p "$udhcpc_script_dir"
   cat > "$udhcpc_script_dir/default.script" <<'UDHCPC_SCRIPT'
@@ -174,15 +174,27 @@ case "$1" in
   bound|renew)
     [ -n "$ip" ]     && /bin/busybox ip addr replace "${ip}/${mask:-24}" dev "$interface"
     [ -n "$router" ] && /bin/busybox ip route replace default via "$router" dev "$interface"
+    if [ -n "$dns" ]; then
+      if command -v resolvconf >/dev/null 2>&1; then
+        for ns in $dns; do echo "nameserver $ns"; done | resolvconf -a "$interface.udhcpc"
+      else
+        printf '' > /etc/resolv.conf
+        for ns in $dns; do
+          printf 'nameserver %s\n' "$ns" >> /etc/resolv.conf
+        done
+      fi
+    fi
     ;;
   deconfig)
+    if command -v resolvconf >/dev/null 2>&1; then
+      resolvconf -d "$interface.udhcpc" || true
+    fi
     /bin/busybox ip addr flush dev "$interface"
     /bin/busybox ip route del default 2>/dev/null || true
     ;;
 esac
 UDHCPC_SCRIPT
   chmod 0755 "$udhcpc_script_dir/default.script"
-fi
 
 s6_base_dir="$etc_dir/s6-linux-init"
 s6_skel_dir="$s6_base_dir/skel"

@@ -39,6 +39,39 @@ while [ "$i" -lt 5 ]; do
 done
 
 if command -v ifup >/dev/null 2>&1 && [ -f /etc/network/interfaces ]; then
+  # ifupdown-ng strictly requires an explicit netmask and fails if only CIDR is provided.
+  # cloud-init eni renderer writes CIDR (e.g. address 1.2.3.4/24), so we dynamically patch it.
+  awk '
+  /^[[:space:]]*address[[:space:]]+[0-9a-fA-F:\.]+\/[0-9]+/ {
+      line = $0;
+      sub(/\//, " ", line);
+      split(line, parts, " ");
+      ip = parts[2];
+      cidr = parts[3] + 0;
+      indent = $0;
+      sub(/address.*/, "", indent);
+      if (ip ~ /:/) {
+          mask = cidr;
+      } else {
+          mask = "";
+          for (i=0; i<4; i++) {
+              if (cidr >= 8) { mask = mask "255"; cidr -= 8; }
+              else if (cidr > 0) {
+                  val = 1; for(j=0; j<8-cidr; j++) val*=2;
+                  mask = mask (256 - val); cidr = 0;
+              }
+              else { mask = mask "0"; }
+              if (i < 3) mask = mask ".";
+          }
+      }
+      print indent "address " ip;
+      print indent "netmask " mask;
+      next;
+  }
+  { print }
+  ' /etc/network/interfaces > /etc/network/interfaces.tmp && mv /etc/network/interfaces.tmp /etc/network/interfaces
+
+  /bin/busybox ip addr flush dev "$iface" 2>/dev/null || true
   /sbin/ifup -a || true
 fi
 

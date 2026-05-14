@@ -5,6 +5,7 @@ curl
 dropbear
 iproute2
 ifupdown-ng
+openresolv
 nftables
 
 # Init system
