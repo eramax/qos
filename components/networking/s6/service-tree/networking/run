@@ -13,6 +13,9 @@ if command -v cloud-init >/dev/null 2>&1; then
   done
 fi
 
+# Bring up loopback interface first (required for k3s and other services).
+/bin/busybox ip link set lo up
+
 # Find the first non-loopback interface.
 iface=""
 for candidate in /sys/class/net/*; do
