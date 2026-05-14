@@ -10,6 +10,7 @@ packages:
   - curl
   - iproute2
   - sudo
+  - py3-pip
   - execline
   - s6-linux-init
   - s6-portable-utils

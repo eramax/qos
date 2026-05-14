@@ -27,6 +27,10 @@ chmod -R u+w "$rootfs/sbin" 2>/dev/null || true
 # Set hostname.
 printf 'qos\n' > "$etc_dir/hostname"
 
+# Ensure python and pip symlinks exist (cloud-init installs python3)
+ln -sf python3 "$rootfs/usr/bin/python"
+ln -sf pip3 "$rootfs/usr/bin/pip"
+
 # Generate stable dropbear host keys so the SSH fingerprint survives rebuilds.
 mkdir -p "$etc_dir/dropbear"
 dbkey="$rootfs/usr/bin/dropbearkey"
