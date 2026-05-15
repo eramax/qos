@@ -211,7 +211,7 @@ cmd_create() {
         --name       "SATA Controller" \
         --add        sata \
         --controller IntelAhci \
-        --portcount  1
+        --portcount  4
 
     # Attach ISO
     VBoxManage storageattach "$vm_name" \
@@ -220,6 +220,17 @@ cmd_create() {
         --device     0 \
         --type       dvddrive \
         --medium     "$iso_path"
+
+    # Attach seed ISO (persistent cloud-init config)
+    local seed_iso="$vm_dir/seed.iso"
+    if [[ -f "$seed_iso" ]]; then
+        VBoxManage storageattach "$vm_name" \
+            --storagectl "SATA Controller" \
+            --port       2 \
+            --device     0 \
+            --type       dvddrive \
+            --medium     "$seed_iso"
+    fi
 
     # Create and attach disk
     local vdi_path="$vm_dir/qos-$profile.vdi"

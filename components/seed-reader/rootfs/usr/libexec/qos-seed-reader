@@ -67,6 +67,7 @@ write_resolv_conf() {
     cat > "$_tmp"
     if [ -s "$_tmp" ]; then
         mv "$_tmp" "$(root_path /etc/resolv.conf)"
+        chmod 644 "$(root_path /etc/resolv.conf)"
     else
         rm -f "$_tmp"
     fi
