@@ -184,15 +184,25 @@ mount -t tmpfs tmpfs /sysroot/run
 mount -t tmpfs tmpfs /sysroot/tmp -o nosuid,nodev,mode=1777 2>/dev/null || true
 
 # Fix ownership lost when rootfs is built as non-root.
-# Dropbear requires /root/.ssh to be owned by root.
+# Only fix specific critical paths — a full recursive chown copies every file
+# into the tmpfs-backed overlay upper dir, exhausting space on 1GB RAM VMs.
 echo "[live-init] Fixing rootfs ownership..."
-chown -R 0:0 /sysroot 2>/dev/null || true
+chown 0:0 /sysroot/root 2>/dev/null || true
+chown -R 0:0 /sysroot/root/.ssh 2>/dev/null || true
+chmod 700 /sysroot/root/.ssh 2>/dev/null || true
+chown 0:0 /sysroot/etc/shadow 2>/dev/null || true
+chmod 640 /sysroot/etc/shadow 2>/dev/null || true
 chown -R 1000:1000 /sysroot/home/emo 2>/dev/null || true
 
 # Fix setuid binaries
+chown 0:0 /sysroot/usr/bin/sudo 2>/dev/null || true
 chmod 4755 /sysroot/usr/bin/sudo 2>/dev/null || true
+chown 0:0 /sysroot/usr/bin/su 2>/dev/null || true
 chmod 4755 /sysroot/usr/bin/su 2>/dev/null || true
+chown 0:0 /sysroot/etc/sudoers 2>/dev/null || true
 chmod 0440 /sysroot/etc/sudoers 2>/dev/null || true
+chown 0:0 /sysroot/etc/sudo.conf 2>/dev/null || true
+chown 0:0 /sysroot/etc/sudoers.d 2>/dev/null || true
 
 echo "[live-init] Switching to live rootfs..."
 exec switch_root /sysroot /sbin/init
@@ -264,6 +274,12 @@ mkdir -p "$iso_root"
 # Put the ESP image at the ISO root; xorriso uses it as the EFI boot entry.
 cp "$esp_img" "$iso_root/efi.img"
 cp "$rootfs_sfs" "$iso_root/rootfs.sfs"
+
+# Put the kernel and live initramfs at the ISO root so bootiso can find
+# them when mounting the ISO directly (they are also inside efi.img for
+# Limine's boot() protocol).
+cp "$boot_dir/vmlinuz" "$iso_root/vmlinuz"
+cp "$live_initramfs" "$iso_root/initramfs-live.img"
 
 # Copy BOOTX64.EFI into the ISO filesystem at /EFI/BOOT/ so OVMF can find
 # it when scanning the optical drive as a filesystem (avoids skipping the

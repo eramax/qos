@@ -8,7 +8,6 @@ fi
 service="$1"
 action="$2"
 
-# Map cloud-init's service names to QOS service names if needed
 case "$service" in
     sshd) service="dropbear" ;;
     network) service="networking" ;;
@@ -17,9 +16,17 @@ esac
 svc_dir="/run/service/$service"
 
 if [ ! -d "$svc_dir" ]; then
-    # Fallback to true if service doesn't exist, to not break cloud-init
     exit 0
 fi
+
+case "$service" in
+    networking)
+        # Never restart networking from cloud-init — the networking service
+        # manages its own DHCP lifecycle (udhcpc).  A restart would kill the
+        # active DHCP client and lose the lease.
+        exit 0
+        ;;
+esac
 
 case "$action" in
     start|restart)

@@ -17,8 +17,8 @@ NC='\033[0m'
 
 # Defaults for profiles
 declare -A PROFILE_CONFIG=(
-    [server]="server|1024|2|16|4096"
-    [desktop]="desktop|8192|4|128|8192"
+    [server]="server|1024|2|16|8192"
+    [desktop]="desktop|8192|4|128|16384"
 )
 
 log()   { printf "${BLUE}[VM]${NC} %s\n" "$*"; }
@@ -92,7 +92,8 @@ get_iso_path() {
 # Get serial log path
 get_serial_log() {
     local profile="$1"
-    echo "$PROJECT_ROOT/build/screens/qos-${profile}-serial.log"
+    local vm_dir=$(get_vm_dir "$profile")
+    echo "$vm_dir/serial.log"
 }
 
 # Check if VM exists
@@ -175,10 +176,10 @@ cmd_create() {
         --drag-and-drop   bidirectional \
         --usb             on \
         --usbehci         on \
-        --nic1            bridged \
-        --bridgeadapter1  wlp13s0 \
+        --nic1            nat \
         --nictype1        virtio \
         --cableconnected1 on \
+        --natpf1          "ssh,tcp,,2222,,22" \
         --boot1           dvd \
         --boot2           disk \
         --boot3           none \
@@ -257,37 +258,7 @@ cmd_boot() {
     VBoxManage startvm "$vm_name" --type headless || error "Failed to start VM"
 
     ok "VM started: $vm_name"
-    log ""
-    log "Finding VM IP address (bridged on wlp13s0)..."
-
-    local serial_log=$(get_serial_log "$profile")
-
-    # Wait for VM to get an IP and extract it from serial log
-    local vm_ip=""
-    local max_wait=60
-    local elapsed=0
-    while [[ -z "$vm_ip" && $elapsed -lt $max_wait ]]; do
-        # Look for IP address in kernel messages on serial log
-        vm_ip=$(grep -o 'inet [0-9.]*' "$serial_log" 2>/dev/null | tail -1 | awk '{print $2}' || true)
-        if [[ -z "$vm_ip" ]]; then
-            # Alternative: look for DHCP assignment
-            vm_ip=$(grep -oP 'inet \K[0-9.]+' "$serial_log" 2>/dev/null | tail -1 || true)
-        fi
-        if [[ -z "$vm_ip" ]]; then
-            sleep 2
-            ((elapsed+=2))
-        fi
-    done
-
-    if [[ -n "$vm_ip" ]]; then
-        ok "VM IP: $vm_ip"
-        info "SSH: sshpass -p emo2500 ssh -o StrictHostKeyChecking=no emo@$vm_ip"
-    else
-        log "Could not auto-detect IP. Check serial log:"
-        info "tail -f $serial_log"
-        log "Once booted, find the IP with: ip addr show"
-        info "Then SSH with: sshpass -p emo2500 ssh -o StrictHostKeyChecking=no emo@<ip>"
-    fi
+    info "SSH: sshpass -p emo2500 ssh -o StrictHostKeyChecking=no -p 2222 emo@localhost"
 }
 
 # Stop VM
@@ -351,42 +322,26 @@ cmd_ssh() {
     [[ -n "$profile" ]] || error "Profile required: server | desktop"
 
     local vm_name="qos-$profile"
-    local serial_log=$(get_serial_log "$profile")
 
     vm_exists "$profile" || error "VM does not exist: $vm_name"
-    vm_running "$profile" || { log "Starting VM..."; cmd_boot "$profile"; sleep 30; }
+    vm_running "$profile" || { log "Starting VM..."; cmd_boot "$profile"; sleep 20; }
 
-    # Try to find VM's IP from serial log (bridged mode)
-    local vm_ip=""
-    local max_attempts=10
-    for ((i=0; i<max_attempts; i++)); do
-        vm_ip=$(grep -oP 'inet \K[0-9.]+' "$serial_log" 2>/dev/null | grep -v '^127\.' | tail -1 || true)
-        if [[ -n "$vm_ip" ]]; then
-            break
-        fi
-        if [[ $i -lt $((max_attempts-1)) ]]; then
-            sleep 3
-        fi
-    done
-
-    if [[ -z "$vm_ip" ]]; then
-        error "Could not find VM's IP. Check serial log: tail -f $serial_log"
-    fi
-
-    log "Connecting to VM: $vm_name at $vm_ip"
+    log "Connecting to VM: $vm_name"
 
     if [[ -z "$cmd" ]]; then
         # Interactive shell
         sshpass -p emo2500 ssh \
             -o StrictHostKeyChecking=no \
             -o UserKnownHostsFile=/dev/null \
-            emo@"$vm_ip"
+            -p 2222 \
+            emo@localhost
     else
         # Execute command
         sshpass -p emo2500 ssh \
             -o StrictHostKeyChecking=no \
             -o UserKnownHostsFile=/dev/null \
-            emo@"$vm_ip" \
+            -p 2222 \
+            emo@localhost \
             "$cmd"
     fi
 }
@@ -402,39 +357,22 @@ cmd_bootiso() {
 
     local vm_name="qos-$profile"
     local vm_dir=$(get_vm_dir "$profile")
-    local serial_log=$(get_serial_log "$profile")
     local remote_iso="/tmp/boot.iso"
     local iso_size=$(du -h "$iso_file" | cut -f1)
 
     vm_exists "$profile" || error "VM does not exist: $vm_name"
-    vm_running "$profile" || { log "Starting VM..."; cmd_boot "$profile"; sleep 30; }
+    vm_running "$profile" || { log "Starting VM..."; cmd_boot "$profile"; sleep 20; }
 
-    # Try to find VM's IP from serial log (bridged mode)
-    local vm_ip=""
-    local max_attempts=10
-    for ((i=0; i<max_attempts; i++)); do
-        vm_ip=$(grep -oP 'inet \K[0-9.]+' "$serial_log" 2>/dev/null | grep -v '^127\.' | tail -1 || true)
-        if [[ -n "$vm_ip" ]]; then
-            break
-        fi
-        if [[ $i -lt $((max_attempts-1)) ]]; then
-            sleep 3
-        fi
-    done
-
-    if [[ -z "$vm_ip" ]]; then
-        error "Could not find VM's IP. Check serial log: tail -f $serial_log"
-    fi
-
-    log "Copying ISO to VM: $vm_name at $vm_ip"
+    log "Copying ISO to VM: $vm_name"
     log "  Local:  $iso_file ($iso_size)"
     log "  Remote: $remote_iso"
 
-    sshpass -p emo2500 scp \
+    sshpass -p emo2500 ssh \
         -o StrictHostKeyChecking=no \
         -o UserKnownHostsFile=/dev/null \
-        "$iso_file" \
-        "emo@${vm_ip}:$remote_iso" || error "Failed to copy ISO"
+        -p 2222 \
+        emo@localhost \
+        "cat > $remote_iso" < "$iso_file" || error "Failed to copy ISO"
 
     ok "ISO copied"
 
@@ -445,7 +383,8 @@ cmd_bootiso() {
     sshpass -p emo2500 ssh \
         -o StrictHostKeyChecking=no \
         -o UserKnownHostsFile=/dev/null \
-        emo@"$vm_ip" \
+        -p 2222 \
+        emo@localhost \
         "sudo bootiso '$remote_iso'" || true
 
     log ""

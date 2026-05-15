@@ -10,16 +10,28 @@ mkdir -p "$state_dir"
 
 if [ -f /etc/cloud-init.disabled ] || grep -q 'cloud-init=off' /proc/cmdline 2>/dev/null; then
     : > "$done_marker"
-    
+    exit 0
 fi
 
 if ! command -v cloud-init >/dev/null 2>&1; then
     : > "$done_marker"
-    
+    exit 0
 fi
 
 if ! cloud-init init --local; then
     echo "cloud-init-local: init --local failed, continuing with fallback networking" >&2
+fi
+
+# Cloud-init may render an ENI network config with "dhcp" method that
+# ifupdown-ng does not support.  Remove it so the networking service
+# uses its own udhcpc DHCP client instead of the broken ifup path.
+if [ -f /etc/network/interfaces ]; then
+    dhcp_only="$(grep -c 'inet dhcp' /etc/network/interfaces 2>/dev/null || true)"
+    static_line="$(grep -c 'inet static\|inet manual\|address ' /etc/network/interfaces 2>/dev/null || true)"
+    if [ "$dhcp_only" -gt 0 ] && [ "$static_line" -eq 0 ]; then
+        echo "cloud-init-local: removing dhcp-only /etc/network/interfaces (ifupdown-ng lacks dhcp support)"
+        rm -f /etc/network/interfaces
+    fi
 fi
 
 : > "$done_marker"

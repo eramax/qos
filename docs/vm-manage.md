@@ -63,7 +63,7 @@ make vm-boot PROFILE=server
 **Result:**
 - VM boots in headless mode
 - You can SSH at `localhost:2222`
-- Serial log at `build/screens/qos-{profile}-serial.log`
+- Serial log at `virtualbox/qos-{profile}/serial.log`
 
 ### Stop VM
 
@@ -254,25 +254,23 @@ virtualbox/
     └── Logs/
 ```
 
-### SSH Access
+### SSH Credentials
 
+- **Host:** `localhost`
+- **Port:** `2222` (NAT port forwarding)
 - **User:** `emo`
 - **Password:** `emo2500`
-- **Network:** Bridged to `wlp13s0` (gets DHCP IP on your network)
-- **Discovery:** IP is auto-detected from serial log when booting, or check `tail -f build/screens/qos-<profile>-serial.log`
-
-The VM is connected via bridge mode on your WiFi, so it gets its own IP address on your network instead of using localhost port forwarding.
 
 ### Serial Console
 
 Serial output is logged to:
 ```
-build/screens/qos-{profile}-serial.log
+virtualbox/qos-{profile}/serial.log
 ```
 
 Monitor with:
 ```bash
-tail -f build/screens/qos-server-serial.log
+tail -f virtualbox/qos-server/serial.log
 ```
 
 ## Troubleshooting
@@ -307,7 +305,7 @@ make vm-ssh PROFILE=server
 
 Or check boot progress:
 ```bash
-tail -f build/screens/qos-server-serial.log
+tail -f virtualbox/qos-server/serial.log
 ```
 
 ### ISO not found
@@ -346,7 +344,7 @@ done
 ```bash
 # Terminal 1: Boot and monitor server
 make vm-boot PROFILE=server
-tail -f build/screens/qos-server-serial.log
+tail -f virtualbox/qos-server/serial.log
 
 # Terminal 2: Boot and monitor desktop
 make vm-boot PROFILE=desktop

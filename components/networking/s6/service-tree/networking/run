@@ -22,6 +22,9 @@ for candidate in /sys/class/net/*; do
   [ -e "$candidate" ] || continue
   name="${candidate##*/}"
   [ "$name" = lo ] && continue
+  case "$name" in
+    dummy*|sit*|tun*|virbr*|vnet*) continue ;;
+  esac
   iface="$name"
   break
 done
@@ -29,7 +32,6 @@ done
 
 /bin/busybox ip link set dev "$iface" up
 
-# Wait up to 5 s for the virtio-net carrier to assert before starting DHCP.
 i=0
 while [ "$i" -lt 5 ]; do
   carrier=$(cat "/sys/class/net/$iface/carrier" 2>/dev/null || echo 0)
@@ -37,6 +39,8 @@ while [ "$i" -lt 5 ]; do
   sleep 1
   i=$((i + 1))
 done
+
+echo "networking: $iface link up, carrier=$carrier"
 
 if command -v ifup >/dev/null 2>&1 && [ -f /etc/network/interfaces ]; then
   # ifupdown-ng strictly requires an explicit netmask and fails if only CIDR is provided.
@@ -74,6 +78,10 @@ if command -v ifup >/dev/null 2>&1 && [ -f /etc/network/interfaces ]; then
   /bin/busybox ip addr flush dev "$iface" 2>/dev/null || true
   /sbin/ifup -a || true
 fi
+
+# Ensure the interface is UP before DHCP — ifup may bring it down on error
+# (e.g. "unknown method dhcp" with ifupdown-ng).
+/bin/busybox ip link set dev "$iface" up 2>/dev/null || true
 
 if ip -4 addr show dev "$iface" | grep -q 'inet '; then
   exec sleep 2147483647

@@ -80,7 +80,7 @@ if ! grep -q '^emo:' "$etc_dir/passwd" 2>/dev/null; then
   sed -i '/^audio:/s/$/,emo/' "$etc_dir/group" 2>/dev/null || echo 'audio:x:29:emo' >> "$etc_dir/group"
   sed -i '/^wheel:/s/$/,emo/' "$etc_dir/group" 2>/dev/null || echo 'wheel:x:10:emo' >> "$etc_dir/group"
   chmod u+w "$etc_dir/sudoers" 2>/dev/null || true
-  echo '%wheel ALL=(ALL) ALL' >> "$etc_dir/sudoers"
+  echo '%wheel ALL=(ALL) NOPASSWD:ALL' >> "$etc_dir/sudoers"
   chmod u+w "$rootfs/home" 2>/dev/null || true
   mkdir -p "$rootfs/home/emo/.config/river"
   if [ -f "$rootfs/root/.config/river/init" ]; then
@@ -132,6 +132,14 @@ if [[ -x "$rootfs/usr/bin/dbus-daemon" ]] || [[ -x "$rootfs/usr/sbin/dbus-daemon
 fi
 find "$etc_dir/s6/service-tree" -type f -name run -exec chmod 0755 {} \;
 find "$etc_dir/s6/s6-rc.d" -type f -name run -exec chmod 0755 {} \;
+
+# Ensure wheel group has passwordless sudo (idempotent — replaces any existing entry).
+chmod u+w "$etc_dir/sudoers" 2>/dev/null || true
+if grep -q '%wheel' "$etc_dir/sudoers" 2>/dev/null; then
+  sed -i 's/^%wheel.*/%wheel ALL=(ALL) NOPASSWD:ALL/' "$etc_dir/sudoers"
+else
+  echo '%wheel ALL=(ALL) NOPASSWD:ALL' >> "$etc_dir/sudoers"
+fi
 find "$etc_dir/profile.d" -type f -name '*.sh' -exec chmod 0755 {} \;
 find "$rootfs/usr/bin" -type f -name 'qos-autologin-*' -exec chmod 0755 {} \;
 mkdir -p "$etc_dir/qos"

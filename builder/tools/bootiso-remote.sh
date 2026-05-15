@@ -104,7 +104,7 @@ fi
 [ -f "$ISO_FILE" ] || error "ISO not found: $ISO_FILE"
 
 # Check for required tools
-for cmd in sshpass ssh scp; do
+for cmd in sshpass ssh; do
     command -v "$cmd" >/dev/null 2>&1 || error "Required tool missing: $cmd"
 done
 
@@ -122,12 +122,12 @@ log "Copying ISO to remote host..."
 ISO_SIZE=$(du -h "$ISO_FILE" | cut -f1)
 log "  Size: $ISO_SIZE"
 
-sshpass -p "$REMOTE_PASS" scp \
-    -P "$REMOTE_PORT" \
+sshpass -p "$REMOTE_PASS" ssh \
+    -p "$REMOTE_PORT" \
     -o StrictHostKeyChecking=no \
     -o UserKnownHostsFile=/dev/null \
-    "$ISO_FILE" \
-    "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_ISO_PATH}" || error "Failed to copy ISO"
+    "${REMOTE_USER}@${REMOTE_HOST}" \
+    "cat > ${REMOTE_ISO_PATH}" < "$ISO_FILE" || error "Failed to copy ISO"
 
 ok "ISO copied to $REMOTE_HOST:$REMOTE_ISO_PATH"
 

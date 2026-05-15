@@ -44,6 +44,7 @@ Commands:
   e2e [...]            Run full end-to-end suite       (qos-e2e-full)
   ota [...]            A/B OTA orchestration           (qos-ota)
 
+  info                 Show system information
   build [args...]      Build the distribution (host-side, repo-only)
   manifest <sub>       Work with QOS_MANIFEST yaml (gen, diff, validate)
   profile <sub>        Show or set the active workload profile
@@ -105,6 +106,64 @@ cmd_profile() {
             exit 2
             ;;
     esac
+}
+
+cmd_info() {
+    version_file="/etc/qos/version"
+    boot_source_file="/etc/qos/boot-source"
+
+    qos_version="QOS build: unknown"
+    if [ -r "$version_file" ]; then
+        qos_version="$(cat "$version_file" 2>/dev/null)"
+    fi
+
+    kernel_version="$(uname -r 2>/dev/null || printf 'unknown')"
+    mem_kib="$(awk '/^MemTotal:/ { print $2; exit }' /proc/meminfo 2>/dev/null || printf '0')"
+    case "$mem_kib" in
+        ''|*[!0-9]*) mem_kib=0 ;;
+    esac
+    ram_mib=$(( (mem_kib + 1023) / 1024 ))
+
+    uptime_minutes="$(awk '{
+        s = int($1)
+        d = int(s / 86400)
+        h = int((s % 86400) / 3600)
+        m = int((s % 3600) / 60)
+        if (d > 0) {
+            printf "%dd %dh %dm", d, h, m
+        } else if (h > 0) {
+            printf "%dh %dm", h, m
+        } else {
+            printf "%dm", m
+        }
+    }' /proc/uptime 2>/dev/null || printf 'unknown')"
+
+    ipv4_addr="$(ip -o -4 addr show scope global 2>/dev/null | awk '
+    {
+        for (i = 1; i <= NF; i++) {
+            if ($i == "inet") {
+                print $(i + 1)
+                exit
+            }
+        }
+    }
+    ')"
+    [ -n "$ipv4_addr" ] || ipv4_addr="none"
+
+    disk_line="$(df -h / 2>/dev/null | awk 'NR==2 { printf "%s total, %s used, %s free (%s used)", $2, $3, $4, $5 }')"
+    [ -n "$disk_line" ] || disk_line="unknown"
+
+    boot_source="$(cat "$boot_source_file" 2>/dev/null || true)"
+
+    printf '%s\n' "$qos_version"
+    if [ "$boot_source" = "live-cdrom" ]; then
+        printf '%s\n' "Boot: live CD-ROM"
+    fi
+    printf '%s\n' "Kernel: $kernel_version"
+    printf '%s\n' "Uptime: $uptime_minutes"
+    printf '%s\n' "IPv4: $ipv4_addr"
+    printf '%s\n' "RAM: ${ram_mib} MiB"
+    printf '%s\n' "Disk: $disk_line"
 }
 
 cmd_verify() {
@@ -172,6 +231,7 @@ main() {
         build)        cmd_build "$@" ;;
         manifest)     cmd_manifest "$@" ;;
         profile)      cmd_profile "$@" ;;
+        info)         cmd_info "$@" ;;
         verify)       cmd_verify "$@" ;;
         *)
             printf 'error: unknown command: %s\n\n' "$cmd" >&2
