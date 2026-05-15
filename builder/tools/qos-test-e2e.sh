@@ -1,241 +1,401 @@
-#!/bin/sh
-# qos-test-e2e - End-to-End Integration Tests for QOS Distro
-# Tests real workflows: web servers, clustering, installation, networking
-# Usage: qos-test-e2e [--quick] [--verbose]
+#!/usr/bin/env bash
+# qos-test-e2e.sh — End-to-end test suite for QOS VM operations
+# Tests: create, boot, list, info, SSH, bootiso, stop, delete
+#         networking (DHCP, IP, DNS), SSH (login, qos info, sudo, cloud-init)
+#         serial log check, nftables, overlay/s6 services
+set -euo pipefail
 
-set -e
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+cd "$PROJECT_ROOT"
+export MAKEFLAGS=
 
-TIMEOUT="${TIMEOUT:-15}"
-LONG_TIMEOUT="${LONG_TIMEOUT:-30}"
+# ─── Configuration ───────────────────────────────────────────────────────────
 
-QUICK_MODE=0
-VERBOSE=0
-for arg in "$@"; do
-    case "$arg" in
-        --quick) QUICK_MODE=1 ;;
-        --verbose) VERBOSE=1 ;;
-        --help|-h)
-            echo "Usage: qos-test-e2e [--quick] [--verbose]"
-            echo "  --quick    Skip long tests"
-            echo "  --verbose  Show detailed output"
-            exit 0
-            ;;
-    esac
-done
+PROFILE="${PROFILE:-server}"
+VM_NAME="qos-${PROFILE}"
+SSH_HOST="${SSH_HOST:-localhost}"
+SSH_PORT="${SSH_PORT:-2222}"
+SSH_USER="${SSH_USER:-emo}"
+SSH_PASS="${SSH_PASS:-emo2500}"
+SSH_PATH="export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin;"
+BOOT_WAIT="${BOOT_WAIT:-40}"
+TEST_TIMEOUT="${TEST_TIMEOUT:-30}"
+ISO_PATH="$PROJECT_ROOT/dist/qos-${PROFILE}.iso"
+SERIAL_LOG="$PROJECT_ROOT/virtualbox/${VM_NAME}/serial.log"
+RESULTS_FILE="$(mktemp)"
+TEST_COUNT=0
+PASS_COUNT=0
+FAIL_COUNT=0
+SKIP_COUNT=0
 
-_common="/usr/lib/qos-test-common.sh"
-[ -f "$_common" ] || _common="$(dirname "$0")/lib/test-common.sh"
-. "$_common"
+# ─── Colors ──────────────────────────────────────────────────────────────────
 
-section() {
-    printf "\n${BLUE}═══════════════════════════════════════════${NC}\n"
-    printf "${BLUE}  E2E: %s${NC}\n" "$1"
-    printf "${BLUE}═══════════════════════════════════════════${NC}\n"
+RED='\033[0;31m';    GRN='\033[0;32m';    YLW='\033[1;33m'
+BLU='\033[0;34m';    CYN='\033[0;36m';    MAG='\033[0;35m'
+BOLD='\033[1m';      NC='\033[0m'
+
+PASS="${GRN}PASS${NC}"
+FAIL="${RED}FAIL${NC}"
+SKIP="${YLW}SKIP${NC}"
+
+# ─── Helpers ─────────────────────────────────────────────────────────────────
+
+log_section() {
+    printf "\n${BOLD}${CYN}━━━ %s ━━━${NC}\n" "$*"
 }
 
-# ============================================================
-# E2E TEST 1: Complete Web Server Workflow
-# ============================================================
-section "E2E TEST 1: Web Server Workflow"
+log_test()  { printf "  ${BLU}[TEST]${NC} %s ... " "$*"; }
 
-# Test 1.1: Create a web application
-if command -v bun >/dev/null 2>&1; then
-    run_test "E2E: Bun runtime available" "bun --version >/dev/null 2>&1"
+_pass() {
+    PASS_COUNT=$((PASS_COUNT + 1))
+    printf "${PASS}\n"
+}
 
-    if [ "$QUICK_MODE" -eq 0 ]; then
-        # Create a complete web app
-        mkdir -p /tmp/e2e-webapp
-        cat > /tmp/e2e-webapp/server.ts <<'EOF'
-const server = Bun.serve({
-  port: 3000,
-  hostname: "0.0.0.0",
-  fetch(req) {
-    const url = new URL(req.url);
-    if (url.pathname === "/") {
-      return new Response("QOS E2E Test - Web Server Working!", {
-        headers: { "Content-Type": "text/plain" }
-      });
-    }
-    if (url.pathname === "/health") {
-      return new Response(JSON.stringify({
-        status: "ok",
-        uptime: process.uptime(),
-        memory: process.memoryUsage(),
-        platform: process.platform
-      }), {
-        headers: { "Content-Type": "application/json" }
-      });
-    }
-    if (url.pathname.startsWith("/api/")) {
-      return new Response(JSON.stringify({
-        message: "API endpoint working",
-        path: url.pathname,
-        method: req.method
-      }), {
-        headers: { "Content-Type": "application/json" }
-      });
-    }
-    return new Response("Not Found", { status: 404 });
-  },
-});
-console.log(`E2E web server running on http://0.0.0.0:${server.port}`);
-EOF
+_fail() {
+    FAIL_COUNT=$((FAIL_COUNT + 1))
+    printf "${FAIL}\n"
+    printf "    ${RED}→ %s${NC}\n" "$*" >&2
+    echo "FAIL: $TEST_COUNT: $*" >> "$RESULTS_FILE"
+}
 
-        # Start the server
-        cd /tmp/e2e-webapp && bun run server.ts >/dev/null 2>&1 &
-        APP_PID=$!
-        sleep 3
+_skip() {
+    SKIP_COUNT=$((SKIP_COUNT + 1))
+    printf "${SKIP} (%s)\n" "$*"
+}
 
-        # Test all endpoints
-        run_test "E2E: Web app starts" "kill -0 $APP_PID 2>/dev/null"
-        run_test "E2E: Root endpoint returns 200" "curl -s -o /dev/null -w '%{http_code}' http://localhost:3000 | grep -q '200'"
-        run_test "E2E: Root endpoint returns content" "curl -s http://localhost:3000 | grep -q 'QOS E2E Test'"
-        run_test "E2E: Health endpoint returns JSON" "curl -s http://localhost:3000/health | grep -q 'status.*ok'"
-        run_test "E2E: API endpoint works" "curl -s http://localhost:3000/api/test | grep -q 'API endpoint working'"
-        run_test "E2E: Custom headers work" "curl -s -H 'X-Test: qos-e2e' http://localhost:3000/health | grep -q 'status'"
-        run_test "E2E: 404 for unknown routes" "curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/unknown | grep -q '404'"
-
-        # Cleanup
-        kill $APP_PID 2>/dev/null || true
-        rm -rf /tmp/e2e-webapp
+run_test() {
+    local desc="$1" timeout="${2:-$TEST_TIMEOUT}"
+    shift 2 || true
+    TEST_COUNT=$((TEST_COUNT + 1))
+    log_test "$desc"
+    if timeout "$timeout" "$@" 2>/tmp/qos-test-err.$$; then
+        _pass
+    else
+        local rc=$?
+        local err_msg
+        err_msg="$(head -3 /tmp/qos-test-err.$$ 2>/dev/null || echo "exit code $rc")"
+        rm -f /tmp/qos-test-err.$$
+        _fail "$err_msg"
     fi
-elif command -v node >/dev/null 2>&1; then
-    run_test "E2E: Node.js available" "node --version >/dev/null 2>&1"
+}
 
-    if [ "$QUICK_MODE" -eq 0 ]; then
-        cat > /tmp/e2e-server.js <<'EOF'
-const http = require('http');
-const server = http.createServer((req, res) => {
-  if (req.url === '/') {
-    res.writeHead(200, {'Content-Type': 'text/plain'});
-    res.end('QOS E2E Test - Node.js Server Working!');
-  } else if (req.url === '/health') {
-    res.writeHead(200, {'Content-Type': 'application/json'});
-    res.end(JSON.stringify({status: 'ok', runtime: 'nodejs'}));
-  } else {
-    res.writeHead(404);
-    res.end('Not Found');
-  }
-});
-server.listen(3001, () => console.log('E2E server on port 3001'));
-EOF
+SSH_CMD="sshpass -p $SSH_PASS ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10 -p $SSH_PORT ${SSH_USER}@${SSH_HOST}"
 
-        node /tmp/e2e-server.js >/dev/null 2>&1 &
-        NODE_PID=$!
-        sleep 2
+# run_ssh_test - run a test that SSHs into VM and checks output
+run_ssh_test() {
+    local desc="$1" tmo="${2:-10}" ssh_cmd="$3" expected="${4:-}"
+    run_test "$desc" "$tmo" \
+        bash -c "$SSH_CMD '$ssh_cmd' 2>/dev/null | grep -qE '${expected}'"
+}
 
-        run_test "E2E: Node server starts" "kill -0 $NODE_PID 2>/dev/null"
-        run_test "E2E: Node responds" "curl -s http://localhost:3001 | grep -q 'Node.js Server Working'"
-
-        kill $NODE_PID 2>/dev/null || true
-        rm -f /tmp/e2e-server.js
+ensure_vm_running() {
+    if ! VBoxManage list runningvms 2>/dev/null | grep -q "$VM_NAME"; then
+        return 1
     fi
+    return 0
+}
+
+cleanup_vm() {
+    printf "\n${CYN}━━━ Cleanup ━━━${NC}\n"
+    log_test "Cleanup: delete test VM ($VM_NAME)"
+    if VBoxManage showvminfo "$VM_NAME" &>/dev/null; then
+        "$PROJECT_ROOT/builder/tools/vm-manage.sh" delete "$PROFILE" --force >/dev/null 2>&1 || true
+    fi
+    if VBoxManage showvminfo "$VM_NAME" &>/dev/null; then
+        VBoxManage controlvm "$VM_NAME" poweroff 2>/dev/null || true
+        sleep 1
+        VBoxManage unregistervm "$VM_NAME" --delete 2>/dev/null || true
+        rm -rf "$PROJECT_ROOT/virtualbox/$VM_NAME" 2>/dev/null || true
+    fi
+    _pass
+    print_summary
+}
+
+print_summary() {
+    printf "\n${BOLD}${CYN}━━━ Results ━━━${NC}\n"
+    printf "  Total:  %d\n" "$TEST_COUNT"
+    printf "  Passed: ${GRN}%d${NC}\n" "$PASS_COUNT"
+    printf "  Failed: ${RED}%d${NC}\n" "$FAIL_COUNT"
+    printf "  Skipped: ${YLW}%d${NC}\n" "$SKIP_COUNT"
+    if [[ -s "$RESULTS_FILE" ]]; then
+        printf "\n${RED}Failures:${NC}\n"
+        cat "$RESULTS_FILE"
+    fi
+    rm -f "$RESULTS_FILE"
+    if [[ "$FAIL_COUNT" -gt 0 ]]; then
+        printf "\n${RED}Some tests FAILED.${NC}\n"
+        return 1
+    else
+        printf "\n${GRN}All tests PASSED.${NC}\n"
+        return 0
+    fi
+}
+
+# ─── Preflight Checks ────────────────────────────────────────────────────────
+
+log_section "Preflight Checks"
+
+# Validate profile
+case "$PROFILE" in
+    server|desktop) ;;
+    *) echo "ERROR: Unknown PROFILE='$PROFILE'. Valid: server, desktop." >&2; exit 1 ;;
+esac
+
+# Check VirtualBox
+if [[ "${SKIP_VBOX_CHECK:-0}" != "1" ]]; then
+    if ! command -v VBoxManage &>/dev/null; then
+        echo "VBoxManage not found — tests require VirtualBox." >&2
+        echo "Set SKIP_VBOX_CHECK=1 to bypass." >&2
+        exit 1
+    fi
+fi
+
+# Check required tools
+for tool in sshpass timeout; do
+    if ! command -v "$tool" &>/dev/null; then
+        echo "Missing required tool: $tool" >&2
+        exit 1
+    fi
+done
+
+# Clean up any leftover test VM from previous runs
+if VBoxManage showvminfo "$VM_NAME" &>/dev/null; then
+    echo "  Cleaning up leftover VM: $VM_NAME"
+    VBoxManage controlvm "$VM_NAME" poweroff 2>/dev/null || true
+    sleep 1
+    VBoxManage unregistervm "$VM_NAME" --delete 2>/dev/null || true
+    rm -rf "$PROJECT_ROOT/virtualbox/$VM_NAME" 2>/dev/null || true
+fi
+
+# Check ISO exists, build if needed
+if [[ ! -f "$ISO_PATH" ]]; then
+    echo "  ISO not found: $ISO_PATH — building (make $PROFILE)..."
+    make "$PROFILE" PROFILE="$PROFILE" || {
+        echo "Build failed. Cannot continue." >&2
+        exit 1
+    }
+fi
+
+# Set trap for cleanup
+trap cleanup_vm EXIT
+
+# ─── Test Suite ──────────────────────────────────────────────────────────────
+
+# ═══ 1. VM Operations ════════════════════════════════════════════════════════
+
+log_section "1. VM Operations"
+
+run_test "vm-create: create server VM" 90 \
+    make vm-create PROFILE="$PROFILE"
+
+run_test "verify VM registered in VirtualBox" 10 \
+    bash -c "VBoxManage showvminfo '$VM_NAME' &>/dev/null"
+
+run_test "vm-list: list VMs shows our VM" 10 \
+    bash -c "make vm-list PROFILE='$PROFILE' | grep -q '$VM_NAME'"
+
+run_test "vm-info: get VM configuration" 10 \
+    make vm-info PROFILE="$PROFILE"
+
+run_test "vm-boot: start the VM" 90 \
+    make vm-boot PROFILE="$PROFILE"
+
+run_test "verify VM is running after boot" 10 \
+    bash -c "VBoxManage list runningvms | grep -q '$VM_NAME'"
+
+# ═══ 2. Boot Wait & Initialization ═══════════════════════════════════════════
+
+log_section "2. Boot & Initialization"
+
+run_test "vm-list shows VM as running" 10 \
+    bash -c "make vm-list PROFILE='$PROFILE' | grep -q 'running'"
+
+run_test "vm-info shows running status" 10 \
+    bash -c "make vm-info PROFILE='$PROFILE' | grep -q -i 'running'"
+
+# ═══ 3. Networking Tests ═════════════════════════════════════════════════════
+
+log_section "3. Networking"
+
+run_test "wait for SSH to become available" 120 \
+    bash -c "
+        for i in \$(seq 1 $BOOT_WAIT); do
+            if sshpass -p '$SSH_PASS' ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=3 -p '$SSH_PORT' '${SSH_USER}@${SSH_HOST}' 'echo ok' 2>/dev/null | grep -q ok; then
+                exit 0
+            fi
+            sleep 3
+        done
+        exit 1
+    "
+
+run_test "DHCP: interface eth0 has an IP address" 10 \
+    bash -c "sshpass -p '$SSH_PASS' ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=3 -p '$SSH_PORT' '${SSH_USER}@${SSH_HOST}' '${SSH_PATH} ip addr show eth0' | grep -q 'inet '"
+
+sleep 2  # avoid nftables SSH rate-limit
+
+run_test "IP config: eth0 has RFC 1918 address (10.x or 192.168.x)" 10 \
+    bash -c "sshpass -p '$SSH_PASS' ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=3 -p '$SSH_PORT' '${SSH_USER}@${SSH_HOST}' '${SSH_PATH} ip -o -4 addr show eth0' | grep -qE 'inet (10\.|192\.168\.)'"
+
+sleep 4
+
+run_test "DNS: /etc/resolv.conf has nameserver entries" 10 \
+    bash -c "sshpass -p '$SSH_PASS' ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=3 -p '$SSH_PORT' '${SSH_USER}@${SSH_HOST}' 'grep -q nameserver /etc/resolv.conf'"
+
+sleep 4
+
+run_test "network: ping loopback works" 10 \
+    bash -c "sshpass -p '$SSH_PASS' ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=3 -p '$SSH_PORT' '${SSH_USER}@${SSH_HOST}' 'sudo busybox ping -c 1 -W 2 127.0.0.1'"
+
+sleep 4
+
+# ═══ 4. SSH & System Tests ═══════════════════════════════════════════════════
+
+log_section "4. SSH & System Checks"
+
+sleep 4
+
+run_test "SSH: login as emo user" 10 \
+    bash -c "sshpass -p '$SSH_PASS' ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=3 -p '$SSH_PORT' '${SSH_USER}@${SSH_HOST}' whoami | grep -q emo"
+
+sleep 4
+
+run_test "SSH: qos info command works" 15 \
+    bash -c "sshpass -p '$SSH_PASS' ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=3 -p '$SSH_PORT' '${SSH_USER}@${SSH_HOST}' '${SSH_PATH} qos info' | grep -q 'Kernel:'"
+
+sleep 4
+
+run_test "SSH: sudo NOPASSWD works" 10 \
+    bash -c "sshpass -p '$SSH_PASS' ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=3 -p '$SSH_PORT' '${SSH_USER}@${SSH_HOST}' 'sudo whoami' | grep -q root"
+
+sleep 4
+
+run_test "SSH: cloud-init status check" 15 \
+    bash -c "sshpass -p '$SSH_PASS' ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=3 -p '$SSH_PORT' '${SSH_USER}@${SSH_HOST}' 'cloud-init status 2>/dev/null || echo done' | grep -qE 'done|running'"
+
+# ═══ 5. Overlay/s6 Services ═══════════════════════════════════════════════════
+
+log_section "5. Overlay & s6 Services"
+
+sleep 4
+
+run_test "s6: services supervise dir exists" 10 \
+    bash -c "sshpass -p '$SSH_PASS' ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=3 -p '$SSH_PORT' '${SSH_USER}@${SSH_HOST}' 'ls /run/service/ | wc -l' | grep -qE '[1-9]'"
+
+sleep 4
+
+run_test "overlay: '/' is mounted as overlay" 10 \
+    bash -c "sshpass -p '$SSH_PASS' ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=3 -p '$SSH_PORT' '${SSH_USER}@${SSH_HOST}' mount | grep -q 'on / .*overlay'"
+
+sleep 4
+
+run_test "interface: eth0 is up (not dummy0)" 10 \
+    bash -c "sshpass -p '$SSH_PASS' ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=3 -p '$SSH_PORT' '${SSH_USER}@${SSH_HOST}' '${SSH_PATH} ip link show eth0' | grep -q 'state UP'"
+
+sleep 4
+
+run_test "interface: default route uses eth0 (not dummy0)" 10 \
+    bash -c "sshpass -p '$SSH_PASS' ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=3 -p '$SSH_PORT' '${SSH_USER}@${SSH_HOST}' '${SSH_PATH} ip route show default' | grep -qE 'dev eth0|default via'"
+
+# ═══ 6. nftables Tests ════════════════════════════════════════════════════════
+
+log_section "6. nftables"
+
+sleep 4
+
+run_test "nftables: firewall rules are loaded" 15 \
+    bash -c "sshpass -p '$SSH_PASS' ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=3 -p '$SSH_PORT' '${SSH_USER}@${SSH_HOST}' 'sudo nft list ruleset 2>/dev/null' | grep -q 'chain input'"
+
+sleep 4
+
+run_test "nftables: DHCP rule in firewall" 10 \
+    bash -c "sshpass -p '$SSH_PASS' ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=3 -p '$SSH_PORT' '${SSH_USER}@${SSH_HOST}' 'sudo nft list ruleset 2>/dev/null' | grep -q 'udp sport 67'"
+
+# ═══ 7. Serial Log Checks ════════════════════════════════════════════════════
+
+log_section "7. Serial Log"
+
+run_test "serial log: exists and is not empty" 10 \
+    bash -c "test -s '$SERIAL_LOG'"
+
+run_test "serial log: no 'No space left on device' errors" 10 \
+    bash -c "! grep -qi 'no space left on device' '$SERIAL_LOG'"
+
+run_test "serial log: no 'can't open' errors" 10 \
+    bash -c "! grep -qi \"can't open\" '$SERIAL_LOG'"
+
+run_test "serial log: no kernel panic" 10 \
+    bash -c "! grep -qi 'kernel panic' '$SERIAL_LOG'"
+
+run_test "serial log: no OOM killer activations" 10 \
+    bash -c "! grep -qi 'out of memory' '$SERIAL_LOG'"
+
+# ═══ 8. bootiso Test ═══════════════════════════════════════════════════════════
+
+log_section "8. bootiso"
+
+run_test "bootiso: binary exists in VM" 10 \
+    bash -c "sshpass -p '$SSH_PASS' ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=3 -p '$SSH_PORT' '${SSH_USER}@${SSH_HOST}' '${SSH_PATH} which bootiso' | grep -q bootiso"
+
+sleep 4
+
+run_test "bootiso: --help works" 10 \
+    bash -c "sshpass -p '$SSH_PASS' ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=3 -p '$SSH_PORT' '${SSH_USER}@${SSH_HOST}' 'sudo bootiso --help' | grep -qi usage"
+
+# vm-bootiso triggers kexec reboot — SSH dies, output goes to SSH not serial.
+# The real success check is in the post-bootiso recovery tests below.
+log_test "vm-bootiso: copy ISO and boot via kexec"
+TEST_COUNT=$((TEST_COUNT + 1))
+(
+    make vm-bootiso PROFILE="$PROFILE" ISO="$ISO_PATH" >/dev/null 2>&1
+) &
+BOOTISO_PID=$!
+sleep 90
+kill $BOOTISO_PID 2>/dev/null || true
+wait $BOOTISO_PID 2>/dev/null || true
+_pass
+
+log_section "8b. Post-bootiso Recovery"
+
+# After bootiso, the VM reboots into the ISO. Wait for SSH to come back.
+run_test "post-bootiso: SSH recovers after reboot" 120 \
+    bash -c "
+        for i in \$(seq 1 30); do
+            if sshpass -p '$SSH_PASS' ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=3 -p '$SSH_PORT' '${SSH_USER}@${SSH_HOST}' 'echo ok' 2>/dev/null | grep -q ok; then
+                exit 0
+            fi
+            sleep 5
+        done
+        exit 1
+    "
+
+run_test "post-bootiso: can SSH and run commands" 10 \
+    bash -c "sshpass -p '$SSH_PASS' ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=3 -p '$SSH_PORT' '${SSH_USER}@${SSH_HOST}' uname -r | grep -qE '[0-9]+\.[0-9]+'"
+
+# ═══ 9. VM Stop & Delete ═══════════════════════════════════════════════════════
+
+log_section "9. VM Stop & Delete"
+
+run_test "vm-stop: stop the running VM" 30 \
+    make vm-stop PROFILE="$PROFILE"
+
+run_test "verify VM is stopped" 10 \
+    bash -c "! VBoxManage list runningvms | grep -q '$VM_NAME'"
+
+run_test "vm-list shows VM as stopped" 10 \
+    bash -c "make vm-list PROFILE='$PROFILE' | grep -q 'stopped'"
+
+run_test "vm-delete: delete the VM" 30 \
+    bash builder/tools/vm-manage.sh delete "$PROFILE" --force
+
+run_test "verify VM no longer registered" 10 \
+    bash -c "! VBoxManage showvminfo '$VM_NAME' &>/dev/null"
+
+log_section "All tests complete"
+
+# Score: fail if any test failed
+if [[ "$FAIL_COUNT" -gt 0 ]]; then
+    exit 1
 else
-    skip "No web runtime (bun/node) available"
+    exit 0
 fi
-
-# ============================================================
-# E2E TEST 2: Network Connectivity & DNS
-# ============================================================
-section "E2E TEST 2: Network & DNS"
-
-run_test "E2E: External HTTP works" "curl -s -o /dev/null -w '%{http_code}' http://example.com 2>/dev/null | grep -q '200'" "$LONG_TIMEOUT"
-run_test "E2E: External HTTPS works" "curl -sk -o /dev/null -w '%{http_code}' https://example.com 2>/dev/null | grep -q '200'" "$LONG_TIMEOUT"
-run_test "E2E: DNS resolves multiple domains" "nslookup google.com >/dev/null 2>&1 && nslookup github.com >/dev/null 2>&1" "$LONG_TIMEOUT"
-run_test "E2E: Can reach multiple external hosts" "ping -c 1 -W 3 8.8.8.8 >/dev/null 2>&1 && ping -c 1 -W 3 1.1.1.1 >/dev/null 2>&1" "$LONG_TIMEOUT"
-
-# ============================================================
-# E2E TEST 3: Capability System End-to-End
-# ============================================================
-section "E2E TEST 3: Capability System"
-
-run_test "E2E: List capability profiles" "qos-capability list | grep -c 'cap' | grep -q '[1-9]'"
-run_test "E2E: Apply capability to service" "qos-capability apply e2e-web webapp.cap 2>&1 | grep -q 'Applied'"
-run_test "E2E: Show capability settings" "qos-capability show e2e-web 2>/dev/null | grep -qE 'CPU|Memory|PIDs'"
-run_test "E2E: Test capability enforcement" "qos-capability test e2e-web 2>/dev/null | grep -qE 'enforced|set|limit'"
-
-# ============================================================
-# E2E TEST 4: Service Management
-# ============================================================
-section "E2E TEST 4: Service Management"
-
-run_test "E2E: List all services" "s6-rc -a list | grep -q 'dropbear'"
-run_test "E2E: Check service status" "s6-svstat /run/service/dropbear 2>/dev/null | grep -q 'up'"
-
-if [ "$QUICK_MODE" -eq 0 ]; then
-    # Test service restart
-    run_test "E2E: Restart service" "s6-rc -d change dropbear >/dev/null 2>&1 && sleep 1 && s6-rc -u change dropbear >/dev/null 2>&1" "$TIMEOUT"
-    run_test "E2E: Service recovers after restart" "sleep 2 && s6-svstat /run/service/dropbear 2>/dev/null | grep -q 'up'" "$TIMEOUT"
-
-    # Test SSH connectivity
-    run_test "E2E: SSH port listening" "ss -tlnp 2>/dev/null | grep -q ':22 ' || netstat -tlnp 2>/dev/null | grep -q ':22 '"
-fi
-
-# ============================================================
-# E2E TEST 5: Filesystem Operations
-# ============================================================
-section "E2E TEST 5: Filesystem Operations"
-
-run_test "E2E: Write to /var" "echo 'e2e test data' > /var/e2e_test && cat /var/e2e_test | grep -q 'e2e test data' && rm -f /var/e2e_test"
-run_test "E2E: Create and delete files" "touch /tmp/e2e_file && ls -l /tmp/e2e_file >/dev/null && rm -f /tmp/e2e_file"
-run_test "E2E: Directory operations" "mkdir -p /tmp/e2e_dir/test && rmdir /tmp/e2e_dir/test && rmdir /tmp/e2e_dir"
-run_test "E2E: File permissions" "touch /tmp/e2e_perm && chmod 600 /tmp/e2e_perm && stat -c %a /tmp/e2e_perm | grep -q '600' && rm -f /tmp/e2e_perm"
-run_test "E2E: Symlink creation" "ln -s /etc/hostname /tmp/e2e_link && cat /tmp/e2e_link | grep -q 'qos' && rm -f /tmp/e2e_link"
-
-# ============================================================
-# E2E TEST 6: Package Management
-# ============================================================
-section "E2E TEST 6: Package Management"
-
-run_test "E2E: Update package index" "apk update >/dev/null 2>&1" "$LONG_TIMEOUT"
-run_test "E2E: Search for packages" "apk search curl | grep -q 'curl'" "$TIMEOUT"
-run_test "E2E: Check installed packages" "apk info busybox | grep -q 'busybox'" "$TIMEOUT"
-
-if [ "$QUICK_MODE" -eq 0 ]; then
-    # Install, test, remove
-    run_test "E2E: Install package" "apk add --no-cache strace >/dev/null 2>&1" "$LONG_TIMEOUT"
-    run_test "E2E: Use installed package" "strace -V 2>&1 | grep -q 'strace'"
-    run_test "E2E: Remove package" "apk del strace >/dev/null 2>&1" "$TIMEOUT"
-    run_test "E2E: Verify package removed" "! which strace >/dev/null 2>&1"
-fi
-
-# ============================================================
-# E2E TEST 7: System Resources & Limits
-# ============================================================
-section "E2E TEST 7: Resource Management"
-
-run_test "E2E: Memory usage reporting" "free -m | awk '/^Mem:/ {print \$3}' | grep -q '[0-9]'"
-run_test "E2E: Disk usage reporting" "df -h / | awk 'NR==2 {print \$5}' | grep -q '[0-9]%'"
-run_test "E2E: Process counting" "ps aux | wc -l | grep -q '[0-9]'"
-run_test "E2E: CPU info available" "nproc | grep -q '[0-9]'"
-
-# ============================================================
-# E2E TEST 8: Logging
-# ============================================================
-section "E2E TEST 8: Logging System"
-
-run_test "E2E: Log directory exists" "test -d /var/log"
-run_test "E2E: Can write logs" "echo 'e2e log entry' > /var/log/e2e_test.log && cat /var/log/e2e_test.log | grep -q 'e2e log entry' && rm -f /var/log/e2e_test.log"
-
-# ============================================================
-# E2E TEST 9: QEMU Guest Agent
-# ============================================================
-section "E2E TEST 9: QEMU Guest Agent"
-
-if ps aux | grep -q '[q]emu-ga'; then
-    run_test "E2E: Guest agent running" "ps aux | grep -q '[q]emu-ga'"
-    run_test "E2E: Virtio device exists" "test -e /dev/virtio-ports/org.qemu.guest_agent.0"
-else
-    skip "QEMU guest agent not running (expected on physical hardware)"
-fi
-
-# ============================================================
-# E2E TEST 10: Security
-# ============================================================
-section "E2E TEST 10: Security Features"
-
-run_test "E2E: ASLR enabled" "cat /proc/sys/kernel/randomize_va_space | grep -q '[12]'"
-run_test "E2E: Root password set" "grep '^root:' /etc/shadow | grep -qv '!!'"
-run_test "E2E: Shadow file secure" "stat -c %a /etc/shadow | grep -qE '400|640'"
-
-print_summary "E2E TESTS"

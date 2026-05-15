@@ -245,6 +245,9 @@ service_root=/run/service
 
 mkdir -p "$service_root"
 
+# Fix critical device permissions before any service touches them.
+chmod 666 /dev/null 2>/dev/null || true
+
 # 1. Start Core Services
 for service in /etc/s6/service-tree/*; do
   [ -e "$service" ] || continue

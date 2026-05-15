@@ -1,6 +1,10 @@
 #!/bin/sh
 set -eu
 
+# Fix /dev/null permissions immediately — other services may redirect to it.
+chmod 666 /dev/null 2>/dev/null || true
+chmod 666 /run/seatd.sock 2>/dev/null || true
+
 # Wait for DRI card (GPU)
 _n=0; while [ ! -e /dev/dri/card0 ] && [ "$_n" -lt 120 ]; do sleep 0.25; _n=$((_n+1)); done
 

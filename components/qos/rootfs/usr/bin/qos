@@ -114,11 +114,11 @@ cmd_info() {
 
     qos_version="QOS build: unknown"
     if [ -r "$version_file" ]; then
-        qos_version="$(cat "$version_file" 2>/dev/null)"
+        qos_version="$(cat "$version_file")"
     fi
 
-    kernel_version="$(uname -r 2>/dev/null || printf 'unknown')"
-    mem_kib="$(awk '/^MemTotal:/ { print $2; exit }' /proc/meminfo 2>/dev/null || printf '0')"
+    kernel_version="$(uname -r || printf 'unknown')"
+    mem_kib="$(awk '/^MemTotal:/ { print $2; exit }' /proc/meminfo || printf '0')"
     case "$mem_kib" in
         ''|*[!0-9]*) mem_kib=0 ;;
     esac
@@ -136,9 +136,9 @@ cmd_info() {
         } else {
             printf "%dm", m
         }
-    }' /proc/uptime 2>/dev/null || printf 'unknown')"
+    }' /proc/uptime || printf 'unknown')"
 
-    ipv4_addr="$(ip -o -4 addr show scope global 2>/dev/null | awk '
+    ipv4_addr="$(ip -o -4 addr show scope global | awk '
     {
         for (i = 1; i <= NF; i++) {
             if ($i == "inet") {
@@ -150,10 +150,10 @@ cmd_info() {
     ')"
     [ -n "$ipv4_addr" ] || ipv4_addr="none"
 
-    disk_line="$(df -h / 2>/dev/null | awk 'NR==2 { printf "%s total, %s used, %s free (%s used)", $2, $3, $4, $5 }')"
+    disk_line="$(df -h / | awk 'NR==2 { printf "%s total, %s used, %s free (%s used)", $2, $3, $4, $5 }')"
     [ -n "$disk_line" ] || disk_line="unknown"
 
-    boot_source="$(cat "$boot_source_file" 2>/dev/null || true)"
+    boot_source="$(cat "$boot_source_file" || true)"
 
     printf '%s\n' "$qos_version"
     if [ "$boot_source" = "live-cdrom" ]; then
