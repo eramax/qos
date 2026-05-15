@@ -23,8 +23,8 @@ if ! cloud-init init --local; then
 fi
 
 # Cloud-init may render an ENI network config with "dhcp" method that
-# ifupdown-ng does not support.  Remove it so the networking service
-# uses its own udhcpc DHCP client instead of the broken ifup path.
+# ifupdown-ng does not support, or an incomplete config. Ensure eth0 has
+# a working configuration before handing off to the networking service.
 if [ -f /etc/network/interfaces ]; then
     dhcp_only="$(grep -c 'inet dhcp' /etc/network/interfaces 2>/dev/null || true)"
     static_line="$(grep -c 'inet static\|inet manual\|address ' /etc/network/interfaces 2>/dev/null || true)"
@@ -32,6 +32,19 @@ if [ -f /etc/network/interfaces ]; then
         echo "cloud-init-local: removing dhcp-only /etc/network/interfaces (ifupdown-ng lacks dhcp support)"
         rm -f /etc/network/interfaces
     fi
+fi
+
+# If no interfaces file or it's missing an eth0 method, write a DHCP fallback
+# that the networking service can use with udhcpc.
+if [ ! -f /etc/network/interfaces ] || ! grep -q 'iface eth0' /etc/network/interfaces 2>/dev/null; then
+    echo "cloud-init-local: writing DHCP fallback for eth0"
+    cat > /etc/network/interfaces <<'IFACES'
+auto lo
+iface lo inet loopback
+
+auto eth0
+iface eth0 inet dhcp
+IFACES
 fi
 
 : > "$done_marker"

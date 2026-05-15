@@ -4,16 +4,21 @@ set -eu
 PATH=/usr/sbin:/usr/bin:/sbin:/bin
 
 cloud_local_done="/run/qos/cloud-init-local.done"
+cloud_final_done="/run/qos/cloud-init.done"
 
+# Wait for cloud-init to finish so it can render the network config
+# from datasources (NoCloud, ConfigDrive, etc).  On VPS providers this
+# gives us a static IP; on VirtualBox there is no datasource so we get
+# nothing and fall through to DHCP.
 if command -v cloud-init >/dev/null 2>&1; then
   wait_count=0
-  while [ ! -f "$cloud_local_done" ] && [ "$wait_count" -lt 30 ]; do
+  while [ ! -f "$cloud_final_done" ] && [ "$wait_count" -lt 60 ]; do
     sleep 1
     wait_count=$((wait_count + 1))
   done
 fi
 
-# Bring up loopback interface first (required for k3s and other services).
+# Bring up loopback interface first.
 /bin/busybox ip link set lo up
 
 # Find the first non-loopback interface.

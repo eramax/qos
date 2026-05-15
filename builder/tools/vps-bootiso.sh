@@ -19,7 +19,8 @@ REMOTE_ISO="/tmp/boot.iso"
 VPS_TIMEOUT="${VPS_TIMEOUT:-600}"  # 10 minutes
 VPS_RETRY_INTERVAL="${VPS_RETRY_INTERVAL:-5}"
 
-SSH_BASE="sshpass -p $VPS_PASS ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=3 -p $VPS_PORT ${VPS_USER}@${VPS_HOST}"
+_ssh()  { sshpass -p "$VPS_PASS" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=3 -p "$VPS_PORT" "${VPS_USER}@${VPS_HOST}" "$@"; }
+_sshcat() { sshpass -p "$VPS_PASS" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10 -p "$VPS_PORT" "${VPS_USER}@${VPS_HOST}" "cat > $1" < "$2"; }
 
 log()   { printf "${BLUE}[VPS]${NC} %s\n" "$*"; }
 ok()    { printf "${GREEN}[OK]${NC} %s\n" "$*"; }
@@ -70,19 +71,19 @@ log ""
 
 # ── Step 1: Verify VPS is reachable ──────────────────────────────────────────
 log "Checking VPS connectivity..."
-if ! $SSH_BASE "echo ok" 2>/dev/null | grep -q ok; then
+if ! _ssh "echo ok" 2>/dev/null | grep -q ok; then
     err "Cannot reach VPS at $VPS_HOST:$VPS_PORT"
     exit 1
 fi
 ok "VPS reachable"
 
 # Capture current IP before kexec
-OLD_IP="$($SSH_BASE "PATH=/usr/sbin:/sbin:/usr/bin:/bin; ip -o -4 addr show scope global | awk '{for(i=1;i<=NF;i++) if(\$i==\"inet\") print \$(i+1)}' | head -1" 2>/dev/null || echo "unknown")"
+OLD_IP="$(_ssh "PATH=/usr/sbin:/sbin:/usr/bin:/bin ip -o -4 addr show scope global 2>/dev/null" | awk '{for(i=1;i<=NF;i++) if($i=="inet") print $(i+1)}' | head -1 || echo "unknown")"
 log "Current IP: $OLD_IP"
 
 # ── Step 2: Copy ISO ────────────────────────────────────────────────────────
 log "Copying ISO to VPS..."
-$SSH_BASE "cat > $REMOTE_ISO" < "$ISO_FILE" || { err "Failed to copy ISO"; exit 1; }
+_sshcat "$REMOTE_ISO" "$ISO_FILE" || { err "Failed to copy ISO"; exit 1; }
 ok "ISO copied ($REMOTE_ISO)"
 
 # ── Step 3: Prepare kexec wrapper with panic=60 ──────────────────────────────
@@ -122,12 +123,12 @@ echo "vps-bootiso: kexec failed, rebooting to original OS"
 reboot
 KEXEC_WRAP
 
-$SSH_BASE "cat > /tmp/vps-kexec" < /tmp/vps-bootiso-kexec
-$SSH_BASE "chmod +x /tmp/vps-kexec" >/dev/null 2>&1 || true
+_sshcat "/tmp/vps-kexec" /tmp/vps-bootiso-kexec
+_ssh "chmod +x /tmp/vps-kexec" >/dev/null 2>&1 || true
 
 # ── Step 4: Execute kexec ────────────────────────────────────────────────────
 log "Executing kexec into ISO (panic=60 for auto-rollback)..."
-timeout 30 $SSH_BASE "sudo /tmp/vps-kexec" 2>/dev/null || true
+timeout 30 _ssh "sudo /tmp/vps-kexec" 2>/dev/null || true
 log "kexec triggered — VPS is rebooting into QOS ISO"
 
 # ── Step 5: Wait for VPS to come back with an IP ─────────────────────────────
@@ -142,22 +143,24 @@ while [ "$elapsed" -lt "$VPS_TIMEOUT" ]; do
 
     printf "\r  ${YELLOW}[%3ds]${NC} probing..." "$elapsed"
 
-    # Try to connect and get an IP
-    if NEW_IP="$($SSH_BASE "PATH=/usr/sbin:/sbin:/usr/bin:/bin ip -o -4 addr show scope global 2>/dev/null | awk '{for(i=1;i<=NF;i++) if(\$i==\"inet\") print \$(i+1)}' | head -1" 2>/dev/null)" && [ -n "$NEW_IP" ]; then
-        echo ""
-        ok "VPS responded at ${elapsed}s"
-        ok "New IP: $NEW_IP"
-        echo ""
-        $SSH_BASE "PATH=/usr/sbin:/sbin:/usr/bin:/bin; echo '=== qos info ==='; qos info; echo '=== cloud-init status ==='; cloud-init status" 2>/dev/null || true
-        echo ""
-        log "═══════════════════════════════════════════════════════════"
-        ok "VPS bootiso SUCCESS — QOS is running"
-        log "SSH:  sshpass -p $VPS_PASS ssh ${VPS_USER}@${VPS_HOST}"
-        log "═══════════════════════════════════════════════════════════"
-        exit 0
+    # Simple test: if we can SSH in and run a command, VPS is alive with networking
+    if _ssh "echo ok" 2>/dev/null | grep -q ok; then
+        NEW_IP="$(_ssh "PATH=/usr/sbin:/sbin:/usr/bin:/bin ip -o -4 addr show scope global 2>/dev/null" | awk '{for(i=1;i<=NF;i++) if($i=="inet") print $(i+1)}' | head -1)"
+        if [ -n "$NEW_IP" ]; then
+            echo ""
+            ok "VPS responded at ${elapsed}s — IP: $NEW_IP"
+            echo ""
+            _ssh "PATH=/usr/sbin:/sbin:/usr/bin:/bin; echo '=== qos info ==='; qos info; echo '=== cloud-init ==='; cloud-init status" 2>/dev/null || true
+            echo ""
+            log "═══════════════════════════════════════════════════════════"
+            ok "VPS bootiso SUCCESS — QOS is running"
+            log "SSH:  sshpass -p $VPS_PASS ssh ${VPS_USER}@${VPS_HOST}"
+            log "═══════════════════════════════════════════════════════════"
+            exit 0
+        fi
     fi
 
-    printf "\r  ${YELLOW}[%3ds]${NC} waiting for VPS to respond with IP..." "$elapsed"
+    printf "\r  ${YELLOW}[%3ds]${NC} waiting..." "$elapsed"
 done
 
 echo ""
