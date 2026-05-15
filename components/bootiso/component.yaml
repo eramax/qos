@@ -1,0 +1,3 @@
+name: bootiso
+packages:
+  - kexec-tools

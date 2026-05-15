@@ -1,0 +1,65 @@
+#!/bin/sh
+# bootiso - Boot an ISO image via kexec without rebooting through firmware
+set -eu
+export PATH=/usr/sbin:/sbin:/usr/bin:/bin
+
+usage() {
+    cat <<EOF
+Usage: bootiso <img.iso>
+
+Boot a live ISO image using kexec. The ISO is mounted, its kernel and
+initrd are loaded into memory, and execution is handed off immediately.
+On normal shutdown of the ISO session, Limine resumes from the hard disk.
+
+Requirements: root, CONFIG_KEXEC=y, live bootable ISO with vmlinuz + initrd
+EOF
+}
+
+[ "$(id -u)" = "0" ] || { echo "bootiso: must run as root" >&2; exit 1; }
+
+ISO=""
+for _arg in "$@"; do
+    case "$_arg" in
+        --help|-h) usage; exit 0 ;;
+        -*) echo "bootiso: unknown option: $_arg" >&2; exit 1 ;;
+        *) ISO="$_arg" ;;
+    esac
+done
+
+[ -n "$ISO" ] || { usage >&2; exit 1; }
+[ -f "$ISO" ] || { echo "bootiso: file not found: $ISO" >&2; exit 1; }
+
+for _cmd in kexec mount umount; do
+    command -v "$_cmd" >/dev/null 2>&1 || { echo "bootiso: required tool missing: $_cmd" >&2; exit 1; }
+done
+
+MNT="/tmp/bootiso-$$"
+mkdir -p "$MNT"
+
+_cleanup() { umount "$MNT" 2>/dev/null || true; rmdir "$MNT" 2>/dev/null || true; }
+trap _cleanup EXIT INT TERM
+
+echo "bootiso: mounting $ISO ..."
+mount -o loop,ro "$ISO" "$MNT"
+
+# Locate kernel — try common ISO layout paths
+VMLINUZ=""
+INITRD=""
+for _k in vmlinuz boot/vmlinuz live/vmlinuz casper/vmlinuz; do
+    [ -f "$MNT/$_k" ] && VMLINUZ="$MNT/$_k" && break
+done
+for _i in initrd.img boot/initrd.img live/initrd.img casper/initrd.lz casper/initrd; do
+    [ -f "$MNT/$_i" ] && INITRD="$MNT/$_i" && break
+done
+
+[ -n "$VMLINUZ" ] || { echo "bootiso: cannot find vmlinuz in ISO" >&2; exit 1; }
+[ -n "$INITRD"  ] || { echo "bootiso: cannot find initrd in ISO"  >&2; exit 1; }
+
+echo "bootiso: kernel  -> $VMLINUZ"
+echo "bootiso: initrd  -> $INITRD"
+echo "bootiso: loading kernel via kexec ..."
+
+kexec -l "$VMLINUZ" --initrd="$INITRD" --command-line="boot=live"
+
+echo "bootiso: handing off to ISO kernel now ..."
+kexec -e

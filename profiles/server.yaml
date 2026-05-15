@@ -2,6 +2,7 @@ name: server
 extends: base
 kernel:
   fragments:
+    - components/bootiso/kernel/kexec.conf
     - components/cluster-k3s/kernel/k3s.conf
 qemu:
   command: QOS_PROFILE=server QEMU_DISPLAY=none QEMU_MEMORY=1G QEMU_CPUS=2
@@ -10,3 +11,4 @@ qemu:
 components:
   - cluster-k3s
   - cloud-init
+  - bootiso

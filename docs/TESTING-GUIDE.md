@@ -1,260 +1,321 @@
-# QOS Testing & Verification Guide
+# Testing Guide — bootiso & VM Management
 
-**Version:** 2.0  
-**Date:** 2026-04-12
+Complete command reference for testing the bootiso feature and VM management system.
+
+## Quick Test Sequence (Copy & Paste)
+
+```bash
+# 1. Build server and desktop ISOs
+make server
+make desktop
+
+# 2. Create server VM
+make vm-create PROFILE=server
+
+# 3. Boot it
+make vm-boot PROFILE=server
+
+# 4. Wait 30 seconds for boot
+sleep 30
+
+# 5. List VMs to verify it's running
+make vm-list
+
+# 6. Check VM info
+make vm-info PROFILE=server
+
+# 7. SSH and verify bootiso is installed
+sshpass -p emo2500 ssh -o StrictHostKeyChecking=no -p 2222 emo@localhost "which bootiso && bootiso --help"
+
+# 8. Test bootiso command on remote system
+make vm-ssh PROFILE=server  # or run: sshpass -p emo2500 ssh -o StrictHostKeyChecking=no -p 2222 emo@localhost
+
+# 9. Boot desktop ISO via bootiso
+make vm-bootiso PROFILE=server ISO=dist/qos-desktop.iso
+
+# 10. Stop and clean up
+make vm-stop PROFILE=server
+make vm-delete PROFILE=server
+```
 
 ---
 
-## Quick Start
+## Test Scenarios
 
-### 1. Build Everything
+### Scenario 1: Basic VM Operations
 
 ```bash
-make clean && make full
-make iso
+# Build ISOs first
+make server desktop
+
+# Create server VM
+make vm-create PROFILE=server
+
+# Create desktop VM
+make vm-create PROFILE=desktop
+
+# List all VMs
+make vm-list
+
+# Check server VM config
+make vm-info PROFILE=server
+
+# Boot server
+make vm-boot PROFILE=server
+
+# List again (should show running)
+make vm-list
+
+# Stop VM
+make vm-stop PROFILE=server
+
+# Delete VM
+make vm-delete PROFILE=server
 ```
 
-### 2. Boot and Test
-
-| Command | What It Boots | Use Case |
-|---------|---------------|----------|
-| `make qemu` | Raw disk image | Primary testing |
-| `make boot` | Live ISO | Live CD testing |
-| `make qwen2` | Installed disk | After qos-install |
-
----
-
-## Complete Test Workflow
-
-### Step 1: Build and Boot Raw Disk
+### Scenario 2: SSH into VM
 
 ```bash
-# Build raw disk image (256MB with 128MB root)
-make full
+# Build and create VM
+make server
+make vm-create PROFILE=server
+make vm-boot PROFILE=server
+sleep 30
 
-# Boot it
-make qemu
+# SSH into VM shell (interactive)
+make vm-ssh PROFILE=server
 
-# Login (serial console)
-Username: root
-Password: root
+# Inside VM, test bootiso help
+bootiso --help
+
+# Exit
+exit
 ```
 
-### Step 2: Verify System
+### Scenario 3: Boot ISO via bootiso
 
 ```bash
-# Check services
-s6-rc -a list
+# Build both ISOs
+make server desktop
 
-# Check memory (should be <60MB)
-free -m
+# Create and boot server VM
+make vm-create PROFILE=server
+make vm-boot PROFILE=server
+sleep 30
 
-# Check networking
-ping -c 2 8.8.8.8
+# Boot desktop ISO on server VM
+make vm-bootiso PROFILE=server ISO=dist/qos-desktop.iso
 
-# Run tests
-qos-test --quick
+# System will reboot into desktop ISO
 ```
 
-### Step 3: Test Installation
+### Scenario 4: Remote ISO Booting
 
 ```bash
-# Inside VM, install to second disk (1GB)
-qos-install --auto /dev/vdb
+# Build server ISO
+make server
 
-# Verify installation
-fdisk -l /dev/vdb
+# Boot ISO on remote host
+make bootiso-remote HOST=192.168.1.100
 
-# Shutdown
-poweroff
+# With custom credentials
+make bootiso-remote HOST=myhost.com PORT=2222 USER=root PASS=root
+
+# Boot desktop ISO
+make bootiso-remote HOST=192.168.1.100 ISO=dist/qos-desktop.iso
 ```
 
-### Step 4: Boot Installed System
+### Scenario 5: Full qos-install Workflow
 
 ```bash
+# Build server
+make server
+
+# Create and boot VM
+make vm-create PROFILE=server
+make vm-boot PROFILE=server
+sleep 30
+
+# Install to disk
+make vm-ssh PROFILE=server "qos-install --auto /dev/vda"
+
+# Stop and reboot
+make vm-stop PROFILE=server
+sleep 5
+
 # Boot from installed disk
-make qwen2
+make vm-boot PROFILE=server
+sleep 30
 
-# Login and verify
-ssh root@<ip>
-df -h
+# Verify installed system
+make vm-ssh PROFILE=server "mount | grep 'on / '"
 ```
 
-### Step 5: Test Live ISO
+### Scenario 6: Test All VM Commands
 
 ```bash
-# Build ISO
-make iso
+# Build
+make server
 
-# Boot ISO
-make boot
+# Create
+make vm-create PROFILE=server
 
-# Verify live CD behavior
-# System runs from CD, /dev/vdb is empty 1GB disk
+# Help
+make vm-help
+
+# List
+make vm-list
+
+# Info
+make vm-info PROFILE=server
+
+# Boot
+make vm-boot PROFILE=server
+sleep 20
+
+# List (running)
+make vm-list
+
+# SSH with command
+make vm-ssh PROFILE=server "uname -a"
+
+# Stop
+make vm-stop PROFILE=server
+
+# List (stopped)
+make vm-list
+
+# Delete
+make vm-delete PROFILE=server
 ```
 
 ---
 
-## Automated Testing
+## Diagnostic Commands
 
-### Quick System Test (~30 seconds)
-
-```bash
-ssh root@<ip> qos-test --quick
-```
-
-### Full Test Suite (~2 minutes)
+### Check VM Status
 
 ```bash
-ssh root@<ip> qos-test --verbose
+# List VMs
+make vm-list
+
+# Detailed info
+make vm-info PROFILE=server
+
+# Check if running
+VBoxManage list runningvms | grep qos-server
+
+# All VMs
+VBoxManage list vms | grep qos
 ```
 
-### E2E Integration Tests (~5-10 minutes)
+### Monitor Boot
 
 ```bash
-ssh root@<ip> qos-e2e-full --verbose
+# Watch serial log
+tail -f build/screens/qos-server-serial.log
+
+# Check for errors
+tail -50 build/screens/qos-server-serial.log | grep -i error
 ```
 
-**E2E tests include:**
-- ✅ Network & DNS
-- ✅ Capability system
-- ✅ Users & groups
-- ✅ Service management
-- ✅ GCC build & C app
-- ✅ Bun web server (if installed)
-- ✅ k3s Kubernetes (if compatible)
-- ✅ Filesystem operations
-- ✅ Package management
+### SSH Testing
+
+```bash
+# Test connectivity
+timeout 5 sshpass -p emo2500 ssh -o ConnectTimeout=3 -p 2222 emo@localhost whoami
+
+# SSH with verbose
+sshpass -p emo2500 ssh -vvv -o StrictHostKeyChecking=no -p 2222 emo@localhost "echo test"
+
+# Copy file to VM
+sshpass -p emo2500 scp -P 2222 /tmp/test.iso emo@localhost:/tmp/
+```
+
+### Verify bootiso
+
+```bash
+# Check in rootfs
+ls -lh build/rootfs/usr/bin/bootiso
+
+# Check kexec
+ls -lh build/rootfs/usr/sbin/kexec
+
+# Check kernel config
+grep CONFIG_KEXEC build/generated/profiles/server/kernel/x86_64.config
+```
 
 ---
 
-## Expected Results
+## Cleanup
 
-### System Info (After Boot)
+### Delete VMs
 
-```
-Hostname:      qos
-Kernel:        6.19.6
-CPU Cores:     2-4
-RAM:           983 MB total, ~50 MB used
-IP Address:    10.0.3.x
-Disk Layout:
-  overlay      128M root (read-only + overlay)
-  /dev/vda4    auto   /var
-```
+```bash
+# Delete server
+make vm-delete PROFILE=server
 
-### Services (All Should Be Running)
+# Delete desktop
+make vm-delete PROFILE=desktop
 
-```
-✅ cluster
-✅ dns
-✅ dropbear
-✅ getty
-✅ networking
-✅ nftables
-✅ qemu-ga
-✅ reverse-proxy
-✅ webapp
-✅ zram
+# List remaining
+make vm-list
 ```
 
-### Test Pass Rate
+### Clean Build
 
-| Test Suite | Expected Pass Rate |
-|------------|-------------------|
-| `qos-test --quick` | 95%+ |
-| `qos-test --verbose` | 90%+ |
-| `qos-e2e-full` | 80%+ |
+```bash
+# Force rootfs rebuild
+make clean-rootfs
 
-**Expected skips (normal):**
-- Bun tests (if bun not installed)
-- k3s tests (if systemd not available)
-- Reverse proxy tests (if caddy not installed)
+# Clean disk images
+make clean-disk
+
+# Full clean
+make clean
+```
 
 ---
 
 ## Troubleshooting
 
-### Boot Issues
+### Force Stop VM
 
-**Problem:** System doesn't boot  
-**Fix:** Check serial output
 ```bash
-make boot  # Shows serial output directly
+VBoxManage controlvm qos-server poweroff
 ```
 
-**Problem:** No IP address  
-**Fix:** Check networking service
+### Remove VM Completely
+
 ```bash
-ip addr show eth0
-s6-svstat /run/service/networking
+VBoxManage unregistervm qos-server --delete
 ```
 
-### Installation Issues
+### Check Disk Space
 
-**Problem:** `qos-install` fails  
-**Fix:** Check disk space and tools
 ```bash
-# Inside VM
-fdisk -l /dev/vdb
-which fdisk mkfs.ext4 mkfs.vfat
+df -h virtualbox/
+du -sh build/
 ```
 
-**Problem:** Can't boot installed disk  
-**Fix:** Verify installation
+### Check SSH Port
+
 ```bash
-mount /dev/vdb2 /mnt
-ls /mnt/sbin/init
-cat /mnt/etc/fstab
-```
-
-### Test Failures
-
-**Problem:** Tests fail with "Permission denied"  
-**Fix:** Rebuild and reinstall scripts
-```bash
-# On host
-make full
-
-# Inside VM (or rebuild image)
-# Scripts are updated in new image
-```
-
-**Problem:** "No space left on device"  
-**Fix:** Root partition too small  
-**Solution:** Current root is 128MB, should be enough. Check:
-```bash
-df -h /
-du -sh /* | sort -rh | head -10
+netstat -tlnp | grep 2222
 ```
 
 ---
 
-## Verification Checklist
+## Performance Test
 
-### Build Verification
+```bash
+# Time VM creation
+time make vm-create PROFILE=server
 
-- [ ] `make full` completes successfully
-- [ ] `make iso` creates ISO
-- [ ] `dist/qos-x86_64.raw` exists (~256MB)
-- [ ] `dist/qos-x86_64.iso` exists
+# Time VM boot
+time make vm-boot PROFILE=server
 
-### Boot Verification
+# Time SSH connection
+time sshpass -p emo2500 ssh -o ConnectTimeout=10 -p 2222 emo@localhost "uptime"
+```
 
-- [ ] `make qemu` boots to login prompt
-- [ ] `make boot` boots ISO
-- [ ] `make qwen2` boots installed system
-
-### Runtime Verification
-
-- [ ] Login works (root/root)
-- [ ] Memory <60MB
-- [ ] Networking works (ping 8.8.8.8)
-- [ ] All core services running
-- [ ] `qos-test --quick` passes 90%+
-- [ ] `qos-install --auto /dev/vdb` succeeds
-- [ ] Installed system boots via `make qwen2`
-
----
-
-**End of Testing Guide**

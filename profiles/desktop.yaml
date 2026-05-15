@@ -2,6 +2,7 @@ name: desktop
 extends: base
 kernel:
   fragments:
+    - components/bootiso/kernel/kexec.conf
     - components/gpu-open-source/kernel/drm-open.conf
     - components/gpu-open-source/kernel/input-evdev.conf
     - components/gpu-open-source/kernel/usb-tablet.conf
@@ -22,3 +23,4 @@ components:
   - chromium
   - desktop-user
   - virtualbox-guest
+  - bootiso
