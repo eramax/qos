@@ -112,10 +112,16 @@ if [ -f /tmp/boot.iso ]; then
 
     if [ -n "$VMLINUZ" ] && [ -n "$INITRD" ]; then
         CMDLINE="$(cat /proc/cmdline) panic=60"
+        echo "vps-bootiso: clearing stale kexec state..."
+        kexec -u 2>/dev/null || true
         echo "vps-bootiso: loading kernel with panic=60"
-        kexec -l "$VMLINUZ" --initrd="$INITRD" --command-line="$CMDLINE"
-        echo "vps-bootiso: handing off to ISO kernel..."
-        kexec -e
+        if kexec -l "$VMLINUZ" --initrd="$INITRD" --command-line="$CMDLINE"; then
+            echo "vps-bootiso: handing off to ISO kernel..."
+            kexec -e
+        else
+            echo "vps-bootiso: kexec load failed" >&2
+            exit 1
+        fi
     fi
 fi
 # If we get here, something failed — reboot back to disk

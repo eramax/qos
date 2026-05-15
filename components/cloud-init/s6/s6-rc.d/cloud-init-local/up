@@ -34,16 +34,16 @@ if [ -f /etc/network/interfaces ]; then
     fi
 fi
 
-# If no interfaces file or it's missing an eth0 method, write a DHCP fallback
-# that the networking service can use with udhcpc.
+# If no interfaces file or it's missing an eth0 method, write a minimal config.
+# Use "inet manual" so ifupdown-ng skips it and udhcpc can configure the interface.
 if [ ! -f /etc/network/interfaces ] || ! grep -q 'iface eth0' /etc/network/interfaces 2>/dev/null; then
-    echo "cloud-init-local: writing DHCP fallback for eth0"
+    echo "cloud-init-local: writing manual config for eth0 (udhcpc will handle DHCP)"
     cat > /etc/network/interfaces <<'IFACES'
 auto lo
 iface lo inet loopback
 
 auto eth0
-iface eth0 inet dhcp
+iface eth0 inet manual
 IFACES
 fi
 
