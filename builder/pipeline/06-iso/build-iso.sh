@@ -162,12 +162,7 @@ mkdir -p /sysroot/etc/qos
 echo "live-cdrom" > /sysroot/etc/qos/boot-source
 
 # Ensure cloud-init is enabled on the live CD so it can configure network and SSH via cloud metadata.
-# Restrict datasource_list to avoid aggressive /dev/sr0 scanning which causes "Can't open blockdev" errors.
-chmod u+w /sysroot/etc/cloud /sysroot/etc/cloud/cloud.cfg.d 2>/dev/null || true
-mkdir -p /sysroot/etc/cloud/cloud.cfg.d
-cat > /sysroot/etc/cloud/cloud.cfg.d/90-qos-live-datasources.cfg <<'EOF'
-datasource_list: [ NoCloud, Ec2, None ]
-EOF
+rm -f /sysroot/etc/cloud/cloud.cfg.d/90-qos-live-datasources.cfg
 rm -f /sysroot/etc/cloud/cloud.cfg.d/99-qos-live-disable.cfg
 rm -f /sysroot/etc/cloud-init.disabled
 

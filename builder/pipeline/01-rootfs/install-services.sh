@@ -303,3 +303,12 @@ chmod -R a-w "$etc_dir"
 chmod a-w "$rootfs/root"
 
 echo "service configs staged into $rootfs"
+
+# 6. Ensure real ifupdown-ng is used instead of busybox stubs
+echo "Restoring real ifupdown-ng symlinks..."
+chmod +w "$rootfs/sbin" 2>/dev/null || true
+rm -f "$rootfs/sbin/ifup" "$rootfs/sbin/ifdown"
+# Use relative links to stay within the rootfs
+ln -sf ifupdown "$rootfs/sbin/ifup"
+ln -sf ifupdown "$rootfs/sbin/ifdown"
+chmod -w "$rootfs/sbin" 2>/dev/null || true
