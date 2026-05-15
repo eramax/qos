@@ -265,6 +265,11 @@ run_test "SSH: qos info command works" 15 \
 
 sleep 4
 
+run_test "SSH: qos version returns build stamp" 15 \
+    bash -c "sshpass -p '$SSH_PASS' ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=3 -p '$SSH_PORT' '${SSH_USER}@${SSH_HOST}' '${SSH_PATH} qos version' | grep -q '^QOS build:'"
+
+sleep 4
+
 run_test "SSH: sudo NOPASSWD works" 10 \
     bash -c "sshpass -p '$SSH_PASS' ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=3 -p '$SSH_PORT' '${SSH_USER}@${SSH_HOST}' 'sudo whoami' | grep -q root"
 
@@ -371,6 +376,12 @@ run_test "post-bootiso: SSH recovers after reboot" 120 \
 
 run_test "post-bootiso: can SSH and run commands" 10 \
     bash -c "sshpass -p '$SSH_PASS' ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=3 -p '$SSH_PORT' '${SSH_USER}@${SSH_HOST}' uname -r | grep -qE '[0-9]+\.[0-9]+'"
+
+run_test "post-bootiso: qos version returns build stamp" 15 \
+    bash -c "sshpass -p '$SSH_PASS' ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=3 -p '$SSH_PORT' '${SSH_USER}@${SSH_HOST}' '${SSH_PATH} qos version' | grep -q '^QOS build:'"
+
+run_test "post-bootiso: qos info reports IPv4" 15 \
+    bash -c "out=\$(sshpass -p '$SSH_PASS' ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=3 -p '$SSH_PORT' '${SSH_USER}@${SSH_HOST}' '${SSH_PATH} qos info'); printf '%s\n' \"\$out\" | grep -q '^IPv4:' && ! printf '%s\n' \"\$out\" | grep -q '^IPv4: none\$'"
 
 # ═══ 9. VM Stop & Delete ═══════════════════════════════════════════════════════
 

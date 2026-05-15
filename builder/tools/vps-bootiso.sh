@@ -15,9 +15,14 @@ VPS_PORT="${VPS_PORT:-22}"
 VPS_USER="${VPS_USER:-emo}"
 VPS_PASS="${VPS_PASS:-emo2500}"
 ISO_FILE="${ISO_FILE:-}"
-REMOTE_ISO="/tmp/boot.iso"
+REMOTE_KERNEL="/tmp/vps-vmlinuz"
+REMOTE_INITRD="/tmp/vps-initramfs.img"
 VPS_TIMEOUT="${VPS_TIMEOUT:-600}"  # 10 minutes
 VPS_RETRY_INTERVAL="${VPS_RETRY_INTERVAL:-5}"
+EXPECTED_VERSION=""
+LOCAL_TMP_DIR=""
+LOCAL_KERNEL_SHA=""
+LOCAL_INITRD_SHA=""
 
 _ssh()  { sshpass -p "$VPS_PASS" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=3 -p "$VPS_PORT" "${VPS_USER}@${VPS_HOST}" "$@"; }
 _sshcat() { sshpass -p "$VPS_PASS" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10 -p "$VPS_PORT" "${VPS_USER}@${VPS_HOST}" "cat > $1" < "$2"; }
@@ -27,8 +32,29 @@ ok()    { printf "${GREEN}[OK]${NC} %s\n" "$*"; }
 err()   { printf "${RED}[ERR]${NC} %s\n" "$*" >&2; }
 warn()  { printf "${YELLOW}[WARN]${NC} %s\n" "$*"; }
 
-cleanup() { rm -f /tmp/vps-bootiso-kexec; }
+cleanup() {
+    rm -f /tmp/vps-bootiso-kexec
+    [[ -n "$LOCAL_TMP_DIR" ]] && rm -rf "$LOCAL_TMP_DIR"
+}
 trap cleanup EXIT
+
+extract_iso_artifacts() {
+    LOCAL_TMP_DIR="$(mktemp -d /tmp/qos-vps-bootiso.XXXXXX)"
+    xorriso -osirrox on -indev "$ISO_FILE" -extract /vmlinuz "$LOCAL_TMP_DIR/vmlinuz" >/dev/null 2>&1
+    xorriso -osirrox on -indev "$ISO_FILE" -extract /initramfs-live.img "$LOCAL_TMP_DIR/initramfs-live.img" >/dev/null 2>&1
+    xorriso -osirrox on -indev "$ISO_FILE" -extract /rootfs.sfs "$LOCAL_TMP_DIR/rootfs.sfs" >/dev/null 2>&1
+}
+
+build_combined_initramfs() {
+    local unpack_dir="$LOCAL_TMP_DIR/initramfs-tree"
+    mkdir -p "$unpack_dir"
+    (
+        cd "$unpack_dir"
+        lz4 -dc "$LOCAL_TMP_DIR/initramfs-live.img" | cpio -idmu --quiet
+        cp "$LOCAL_TMP_DIR/rootfs.sfs" "$unpack_dir/rootfs.sfs"
+        find . -print0 | cpio --null -o -H newc 2>/dev/null | lz4 -l -z -q -c > "$LOCAL_TMP_DIR/initramfs-kexec.img"
+    )
+}
 
 usage() {
     cat <<EOF
@@ -56,7 +82,7 @@ EOF
 [[ -n "${VPS_HOST:-}" ]] || { usage >&2; exit 1; }
 [[ -f "$ISO_FILE" ]] || { err "ISO not found: $ISO_FILE"; exit 1; }
 
-for cmd in sshpass ssh; do
+for cmd in sshpass ssh sha256sum xorriso unsquashfs lz4 cpio find; do
     command -v "$cmd" >/dev/null 2>&1 || { err "missing: $cmd"; exit 1; }
 done
 
@@ -81,10 +107,38 @@ ok "VPS reachable"
 OLD_IP="$(_ssh "PATH=/usr/sbin:/sbin:/usr/bin:/bin ip -o -4 addr show scope global 2>/dev/null" | awk '{for(i=1;i<=NF;i++) if($i=="inet") print $(i+1)}' | head -1 || echo "unknown")"
 log "Current IP: $OLD_IP"
 
-# ── Step 2: Copy ISO ────────────────────────────────────────────────────────
-log "Copying ISO to VPS..."
-_sshcat "$REMOTE_ISO" "$ISO_FILE" || { err "Failed to copy ISO"; exit 1; }
-ok "ISO copied ($REMOTE_ISO)"
+extract_iso_artifacts
+build_combined_initramfs
+EXPECTED_VERSION="$(unsquashfs -cat "$LOCAL_TMP_DIR/rootfs.sfs" etc/qos/version 2>/dev/null | head -1)"
+[[ -n "$EXPECTED_VERSION" ]] || { err "Could not extract embedded version from $ISO_FILE"; exit 1; }
+LOCAL_KERNEL_SHA="$(sha256sum "$LOCAL_TMP_DIR/vmlinuz" | awk '{print $1}')"
+LOCAL_INITRD_SHA="$(sha256sum "$LOCAL_TMP_DIR/initramfs-kexec.img" | awk '{print $1}')"
+log "Kernel SHA:  $LOCAL_KERNEL_SHA"
+log "Initrd SHA:  $LOCAL_INITRD_SHA"
+log "Expected:    $EXPECTED_VERSION"
+
+# ── Step 2: Copy kernel + initramfs derived from ISO ───────────────────────
+log "Copying extracted kernel and rebuilt initramfs to VPS..."
+_sshcat "$REMOTE_KERNEL" "$LOCAL_TMP_DIR/vmlinuz" || { err "Failed to copy kernel"; exit 1; }
+_sshcat "$REMOTE_INITRD" "$LOCAL_TMP_DIR/initramfs-kexec.img" || { err "Failed to copy initramfs"; exit 1; }
+ok "Kernel and initramfs copied"
+
+log "Verifying uploaded artifact checksums..."
+REMOTE_KERNEL_SHA="$(_ssh "sha256sum '$REMOTE_KERNEL' 2>/dev/null | cut -d' ' -f1" | tr -d '\r')"
+REMOTE_INITRD_SHA="$(_ssh "sha256sum '$REMOTE_INITRD' 2>/dev/null | cut -d' ' -f1" | tr -d '\r')"
+if [[ "$REMOTE_KERNEL_SHA" != "$LOCAL_KERNEL_SHA" ]]; then
+    err "Uploaded kernel checksum mismatch"
+    err "Local:  $LOCAL_KERNEL_SHA"
+    err "Remote: $REMOTE_KERNEL_SHA"
+    exit 1
+fi
+if [[ "$REMOTE_INITRD_SHA" != "$LOCAL_INITRD_SHA" ]]; then
+    err "Uploaded initramfs checksum mismatch"
+    err "Local:  $LOCAL_INITRD_SHA"
+    err "Remote: $REMOTE_INITRD_SHA"
+    exit 1
+fi
+ok "Uploaded artifacts match local SHA256"
 
 # ── Step 3: Prepare kexec wrapper with panic=60 ──────────────────────────────
 log "Preparing kexec wrapper with panic=60..."
@@ -95,33 +149,17 @@ cat > /tmp/vps-bootiso-kexec <<'KEXEC_WRAP'
 set -eu
 # Add panic=60 to kernel cmdline so the VPS reboots automatically
 # if the new kernel fails to boot or panics.
-if [ -f /tmp/boot.iso ]; then
-    MNT="/tmp/bootiso-$$"
-    mkdir -p "$MNT"
-    trap 'umount "$MNT" 2>/dev/null; rmdir "$MNT" 2>/dev/null' EXIT
-    mount -o loop,ro /tmp/boot.iso "$MNT"
-
-    VMLINUZ=""
-    INITRD=""
-    for k in vmlinuz boot/vmlinuz live/vmlinuz casper/vmlinuz; do
-        [ -f "$MNT/$k" ] && VMLINUZ="$MNT/$k" && break
-    done
-    for i in initramfs-live.img initrd.img boot/initrd.img live/initrd.img casper/initrd.lz casper/initrd; do
-        [ -f "$MNT/$i" ] && INITRD="$MNT/$i" && break
-    done
-
-    if [ -n "$VMLINUZ" ] && [ -n "$INITRD" ]; then
-        CMDLINE="$(cat /proc/cmdline) panic=60"
-        echo "vps-bootiso: clearing stale kexec state..."
-        kexec -u 2>/dev/null || true
-        echo "vps-bootiso: loading kernel with panic=60"
-        if kexec -l "$VMLINUZ" --initrd="$INITRD" --command-line="$CMDLINE"; then
-            echo "vps-bootiso: handing off to ISO kernel..."
-            kexec -e
-        else
-            echo "vps-bootiso: kexec load failed" >&2
-            exit 1
-        fi
+if [ -f /tmp/vps-vmlinuz ] && [ -f /tmp/vps-initramfs.img ]; then
+    CMDLINE="$(cat /proc/cmdline) panic=60"
+    echo "vps-bootiso: clearing stale kexec state..."
+    kexec -u 2>/dev/null || true
+    echo "vps-bootiso: loading uploaded kernel/initramfs"
+    if kexec -l /tmp/vps-vmlinuz --initrd=/tmp/vps-initramfs.img --command-line="$CMDLINE"; then
+        echo "vps-bootiso: handing off to ISO kernel..."
+        kexec -e
+    else
+        echo "vps-bootiso: kexec load failed" >&2
+        exit 1
     fi
 fi
 # If we get here, something failed — reboot back to disk
@@ -134,7 +172,13 @@ _ssh "chmod +x /tmp/vps-kexec" >/dev/null 2>&1 || true
 
 # ── Step 4: Execute kexec ────────────────────────────────────────────────────
 log "Executing kexec into ISO (panic=60 for auto-rollback)..."
-timeout 30 _ssh "sudo /tmp/vps-kexec" 2>/dev/null || true
+timeout 30 sshpass -p "$VPS_PASS" ssh \
+    -o StrictHostKeyChecking=no \
+    -o UserKnownHostsFile=/dev/null \
+    -o ConnectTimeout=3 \
+    -p "$VPS_PORT" \
+    "${VPS_USER}@${VPS_HOST}" \
+    "sudo /tmp/vps-kexec" >/dev/null 2>&1 || true
 log "kexec triggered — VPS is rebooting into QOS ISO"
 
 # ── Step 5: Wait for VPS to come back with an IP ─────────────────────────────
@@ -156,7 +200,19 @@ while [ "$elapsed" -lt "$VPS_TIMEOUT" ]; do
             echo ""
             ok "VPS responded at ${elapsed}s — IP: $NEW_IP"
             echo ""
-            _ssh "PATH=/usr/sbin:/sbin:/usr/bin:/bin; echo '=== qos info ==='; qos info; echo '=== cloud-init ==='; cloud-init status" 2>/dev/null || true
+            remote_report="$(_ssh "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; printf 'INFO\\n'; qos info; printf 'VERSION\\n'; qos version; printf 'CLOUD\\n'; cloud-init status 2>/dev/null || true" 2>/dev/null || true)"
+            printf '%s\n' "$remote_report"
+            remote_version="$(printf '%s\n' "$remote_report" | awk '/^QOS build: / { print; exit }')"
+            if [[ "$remote_version" != "$EXPECTED_VERSION" ]]; then
+                err "Booted system version mismatch"
+                err "Expected: $EXPECTED_VERSION"
+                err "Actual:   ${remote_version:-<missing>}"
+                exit 1
+            fi
+            if printf '%s\n' "$remote_report" | grep -q '^IPv4: none$'; then
+                err "Booted system reported no IPv4 address"
+                exit 1
+            fi
             echo ""
             log "═══════════════════════════════════════════════════════════"
             ok "VPS bootiso SUCCESS — QOS is running"

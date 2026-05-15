@@ -102,9 +102,10 @@ done < <("$live_stage/bin/busybox" --list)
 
 cat > "$live_stage/init" <<'LIVE_INIT'
 #!/bin/busybox sh
-# Live CD init — static early userspace. The full rootfs is stored as
-# rootfs.sfs on the runtime ISO device that QEMU also exposes as a
-# separate read-only block disk.
+# Live CD init — static early userspace. The full rootfs normally lives
+# in rootfs.sfs on the runtime ISO block device. For kexec boot paths we
+# can also embed rootfs.sfs directly into the initramfs to avoid falling
+# back to an older still-attached CD-ROM.
 PATH=/bin
 exec >/dev/console 2>&1
 echo "[live-init] QOS Live CD starting..."
@@ -115,35 +116,43 @@ mount -t devtmpfs devtmpfs /dev || { echo "[live-init] FATAL: devtmpfs mount fai
 mount -t tmpfs tmpfs /run || { echo "[live-init] FATAL: tmpfs mount failed"; exec sh; }
 echo "[live-init] kernel cmdline: $(cat /proc/cmdline)"
 
-echo "[live-init] Searching for rootfs.sfs..."
-live_dev=""
-_retry=0
-while [ "$_retry" -lt 10 ]; do
-  for dev in /dev/sr0 /dev/vd* /dev/sd* /dev/sr* /dev/nvme*n*; do
-    [ -b "$dev" ] || continue
-    if mount -t iso9660 -o ro "$dev" /mnt/live 2>/dev/null; then
-      if [ -f /mnt/live/rootfs.sfs ]; then
-        live_dev="$dev"
-        break 2
+rootfs_source=""
+if [ -f /rootfs.sfs ]; then
+  rootfs_source="/rootfs.sfs"
+  echo "[live-init] Using embedded rootfs.sfs from initramfs"
+else
+  echo "[live-init] Searching for rootfs.sfs..."
+  live_dev=""
+  _retry=0
+  while [ "$_retry" -lt 10 ]; do
+    for dev in /dev/sr0 /dev/vd* /dev/sd* /dev/sr* /dev/nvme*n*; do
+      [ -b "$dev" ] || continue
+      if mount -t iso9660 -o ro "$dev" /mnt/live 2>/dev/null; then
+        if [ -f /mnt/live/rootfs.sfs ]; then
+          live_dev="$dev"
+          rootfs_source="/mnt/live/rootfs.sfs"
+          break 2
+        fi
+        umount /mnt/live 2>/dev/null || true
       fi
-      umount /mnt/live 2>/dev/null || true
-    fi
+    done
+    _retry=$((_retry + 1))
+    sleep 1
   done
-  _retry=$((_retry + 1))
-  sleep 1
-done
 
-if [ -z "$live_dev" ]; then
-  echo "[live-init] FATAL: rootfs.sfs not found on any runtime block device"
-  echo "[live-init] /proc/partitions:"
-  cat /proc/partitions
-  exec sh
+  if [ -z "$live_dev" ]; then
+    echo "[live-init] FATAL: rootfs.sfs not found in initramfs or on any runtime block device"
+    echo "[live-init] /proc/partitions:"
+    cat /proc/partitions
+    exec sh
+  fi
+
+  echo "[live-init] runtime ISO device: $live_dev"
 fi
 
-echo "[live-init] runtime ISO device: $live_dev"
-echo "[live-init] Mounting rootfs.sfs..."
+echo "[live-init] Mounting rootfs.sfs from $rootfs_source..."
 mkdir -p /ro-root
-mount -t squashfs -o loop,ro /mnt/live/rootfs.sfs /ro-root \
+mount -t squashfs -o loop,ro "$rootfs_source" /ro-root \
   || { echo "[live-init] FATAL: squashfs mount failed"; exec sh; }
 
 mkdir -p /run/overlay/upper /run/overlay/work /sysroot

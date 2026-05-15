@@ -7,8 +7,13 @@
 
 set -eu
 
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
 PROG="qos"
 PROFILE_FILE="/etc/qos/profile"
+QOS_DIR="/etc/qos"
+VERSION_FILE="$QOS_DIR/version"
+BUILD_VERSION_FILE="$QOS_DIR/build-version"
 
 # Discover where the qos-* siblings live. On an installed system they are in
 # /usr/bin or /usr/local/bin. In the repo they are in components/qos/rootfs/usr/bin
@@ -64,6 +69,36 @@ those tools directly works exactly the same way.
 EOF
 }
 
+read_build_version() {
+    if [ -r "$VERSION_FILE" ]; then
+        cat "$VERSION_FILE"
+        return 0
+    fi
+    if [ -r "$BUILD_VERSION_FILE" ]; then
+        cat "$BUILD_VERSION_FILE"
+        return 0
+    fi
+    printf '%s\n' 'QOS build: unknown'
+}
+
+get_ipv4_addr() {
+    if command -v ip >/dev/null 2>&1; then
+        ip -o -4 addr show scope global
+    elif [ -x /bin/busybox ]; then
+        /bin/busybox ip -o -4 addr show scope global
+    else
+        return 0
+    fi | awk '
+    {
+        for (i = 1; i <= NF; i++) {
+            if ($i == "inet") {
+                print $(i + 1)
+                exit
+            }
+        }
+    }'
+}
+
 run_tool() {
     name="$1"
     shift
@@ -109,13 +144,9 @@ cmd_profile() {
 }
 
 cmd_info() {
-    version_file="/etc/qos/version"
-    boot_source_file="/etc/qos/boot-source"
+    boot_source_file="$QOS_DIR/boot-source"
 
-    qos_version="QOS build: unknown"
-    if [ -r "$version_file" ]; then
-        qos_version="$(cat "$version_file")"
-    fi
+    qos_version="$(read_build_version)"
 
     kernel_version="$(uname -r || printf 'unknown')"
     mem_kib="$(awk '/^MemTotal:/ { print $2; exit }' /proc/meminfo || printf '0')"
@@ -138,16 +169,7 @@ cmd_info() {
         }
     }' /proc/uptime || printf 'unknown')"
 
-    ipv4_addr="$(ip -o -4 addr show scope global | awk '
-    {
-        for (i = 1; i <= NF; i++) {
-            if ($i == "inet") {
-                print $(i + 1)
-                exit
-            }
-        }
-    }
-    ')"
+    ipv4_addr="$(get_ipv4_addr || true)"
     [ -n "$ipv4_addr" ] || ipv4_addr="none"
 
     disk_line="$(df -h / | awk 'NR==2 { printf "%s total, %s used, %s free (%s used)", $2, $3, $4, $5 }')"
@@ -174,19 +196,13 @@ cmd_verify() {
         . /etc/os-release 2>/dev/null || true
         printf 'image: %s %s\n' "${PRETTY_NAME:-qos}" "${VERSION_ID:-unknown}"
     fi
-    if [ -r /etc/qos/build-version ]; then
-        printf 'build: %s\n' "$(cat /etc/qos/build-version)"
-    fi
+    printf 'build: %s\n' "$(read_build_version)"
     printf 'verity: not-configured (planned)\n'
     printf 'signing: not-configured (planned)\n'
 }
 
 cmd_version() {
-    if [ -r /etc/qos/build-version ]; then
-        cat /etc/qos/build-version
-    else
-        printf '%s (no build-version file)\n' "$PROG"
-    fi
+    read_build_version
 }
 
 cmd_build() {

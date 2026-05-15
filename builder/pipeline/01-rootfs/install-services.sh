@@ -149,10 +149,13 @@ printf '%s\n' "$qos_profile" > "$etc_dir/qos/profile"
 rm -f "$etc_dir/cloud/cloud.cfg.d/05_qos-cloud-init.cfg"
 if [[ -n "${QOS_BUILD_VERSION:-}" ]]; then
   printf '%s\n' "$QOS_BUILD_VERSION" > "$etc_dir/qos/version"
+  printf '%s\n' "$QOS_BUILD_VERSION" > "$etc_dir/qos/build-version"
 else
   printf '%s\n' 'QOS build: unknown' > "$etc_dir/qos/version"
+  printf '%s\n' 'QOS build: unknown' > "$etc_dir/qos/build-version"
 fi
 chmod 0444 "$etc_dir/qos/version"
+chmod 0444 "$etc_dir/qos/build-version"
 printf '%s\n' 'installed-disk' > "$etc_dir/qos/boot-source"
 chmod 0444 "$etc_dir/qos/boot-source"
 

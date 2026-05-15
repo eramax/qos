@@ -8,6 +8,14 @@ done_marker="$state_dir/cloud-init-local.done"
 
 mkdir -p "$state_dir"
 
+has_local_seed_device() {
+    if command -v blkid >/dev/null 2>&1; then
+        blkid 2>/dev/null | grep -qiE 'LABEL="(cidata|config-2)"'
+        return $?
+    fi
+    return 1
+}
+
 if [ -f /etc/cloud-init.disabled ] || grep -q 'cloud-init=off' /proc/cmdline 2>/dev/null; then
     : > "$done_marker"
     exit 0
@@ -17,6 +25,18 @@ if ! command -v cloud-init >/dev/null 2>&1; then
     : > "$done_marker"
     exit 0
 fi
+
+# On VPS boots, the cloud-init seed ISO may appear shortly after the service
+# starts. Wait a bit for mdev coldplug and for cidata/config-2 media so
+# cloud-init can detect NoCloud/ConfigDrive instead of falling through early.
+wait_count=0
+while [ "$wait_count" -lt 15 ]; do
+    if [ -f "$state_dir/mdev-coldplug.done" ] && has_local_seed_device; then
+        break
+    fi
+    sleep 1
+    wait_count=$((wait_count + 1))
+done
 
 if ! cloud-init init --local; then
     echo "cloud-init-local: init --local failed, continuing with fallback networking" >&2
@@ -48,4 +68,3 @@ IFACES
 fi
 
 : > "$done_marker"
-
