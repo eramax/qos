@@ -27,9 +27,13 @@ chmod -R u+w "$rootfs/sbin" 2>/dev/null || true
 # Set hostname.
 printf 'qos\n' > "$etc_dir/hostname"
 
-# Ensure python and pip symlinks exist (cloud-init installs python3)
-ln -sf python3 "$rootfs/usr/bin/python"
-ln -sf pip3 "$rootfs/usr/bin/pip"
+# Ensure python/pip symlinks exist when the runtime includes them.
+if [[ -x "$rootfs/usr/bin/python3" ]]; then
+  ln -sf python3 "$rootfs/usr/bin/python"
+fi
+if [[ -x "$rootfs/usr/bin/pip3" ]]; then
+  ln -sf pip3 "$rootfs/usr/bin/pip"
+fi
 
 # Generate stable dropbear host keys so the SSH fingerprint survives rebuilds.
 mkdir -p "$etc_dir/dropbear"
@@ -144,9 +148,6 @@ find "$etc_dir/profile.d" -type f -name '*.sh' -exec chmod 0755 {} \;
 find "$rootfs/usr/bin" -type f -name 'qos-autologin-*' -exec chmod 0755 {} \;
 mkdir -p "$etc_dir/qos"
 printf '%s\n' "$qos_profile" > "$etc_dir/qos/profile"
-# Note: cloud.cfg is already correctly configured by the cloud-init component.
-# Don't revert it here. The component includes proper datasource_list with EC2 support.
-rm -f "$etc_dir/cloud/cloud.cfg.d/05_qos-cloud-init.cfg"
 if [[ -n "${QOS_BUILD_VERSION:-}" ]]; then
   printf '%s\n' "$QOS_BUILD_VERSION" > "$etc_dir/qos/version"
   printf '%s\n' "$QOS_BUILD_VERSION" > "$etc_dir/qos/build-version"

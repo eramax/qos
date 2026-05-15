@@ -163,17 +163,12 @@ mount -t overlay overlay \
 mkdir -p /sysroot/proc /sysroot/sys /sysroot/dev /sysroot/dev/pts /sysroot/run /sysroot/tmp
 
 # Make /etc and /etc/qos writable in the overlay so we can stamp the
-# live-boot identity and disable cloud-init.
+# live-boot identity.
 chmod u+w /sysroot/etc 2>/dev/null || true
 echo "qos-live" > /sysroot/etc/hostname
 echo "qos-live" > /proc/sys/kernel/hostname 2>/dev/null
 mkdir -p /sysroot/etc/qos
 echo "live-cdrom" > /sysroot/etc/qos/boot-source
-
-# Ensure cloud-init is enabled on the live CD so it can configure network and SSH via cloud metadata.
-rm -f /sysroot/etc/cloud/cloud.cfg.d/90-qos-live-datasources.cfg
-rm -f /sysroot/etc/cloud/cloud.cfg.d/99-qos-live-disable.cfg
-rm -f /sysroot/etc/cloud-init.disabled
 
 echo "[live-init] Mounting essential filesystems..."
 mkdir -p /sysroot/sys/fs/cgroup /sysroot/dev/pts

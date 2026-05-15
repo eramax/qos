@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # qos-test-e2e.sh — End-to-end test suite for QOS VM operations
 # Tests: create, boot, list, info, SSH, bootiso, stop, delete
-#         networking (DHCP, IP, DNS), SSH (login, qos info, sudo, cloud-init)
+#         networking (DHCP, IP, DNS), SSH (login, qos info, sudo, seed-reader)
 #         serial log check, nftables, overlay/s6 services
 set -euo pipefail
 
@@ -275,8 +275,8 @@ run_test "SSH: sudo NOPASSWD works" 10 \
 
 sleep 4
 
-run_test "SSH: cloud-init status check" 15 \
-    bash -c "sshpass -p '$SSH_PASS' ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=3 -p '$SSH_PORT' '${SSH_USER}@${SSH_HOST}' 'cloud-init status 2>/dev/null || echo done' | grep -qE 'done|running'"
+run_test "SSH: seed-reader done marker exists" 15 \
+    bash -c "sshpass -p '$SSH_PASS' ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=3 -p '$SSH_PORT' '${SSH_USER}@${SSH_HOST}' 'test -f /run/qos/seed-reader.done'"
 
 # ═══ 5. Overlay/s6 Services ═══════════════════════════════════════════════════
 

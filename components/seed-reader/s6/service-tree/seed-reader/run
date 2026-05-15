@@ -1,0 +1,14 @@
+#!/bin/sh
+set -eu
+
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+mkdir -p /run/qos
+
+if [ -x /usr/libexec/qos-seed-reader ] && command -v yq >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
+    /usr/libexec/qos-seed-reader || true
+else
+    : > /run/qos/seed-reader.done
+fi
+
+exec sleep 2147483647

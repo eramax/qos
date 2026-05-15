@@ -16,7 +16,7 @@ QEMU_IMAGE ?= dist/qos-x86_64.raw
 ROOT := $(shell pwd -P)
 KERNEL_IMAGE := $(ROOT)/build/kernel/arch/x86/boot/bzImage
 
-.PHONY: help full full-container server desktop live-server live-desktop run rootfs clean-rootfs clean-disk resolve-profile ram-check build-log build-grep kernel live qemu bootiso-remote bootiso-help vps-bootiso vm-help vm-create vm-boot vm-stop vm-delete vm-ssh vm-bootiso vm-list vm-info clean
+.PHONY: help full full-container server desktop live-server live-desktop run rootfs clean-rootfs clean-disk resolve-profile ram-check build-log build-grep kernel live qemu bootiso-remote bootiso-help vps-upload-iso vps-run-iso vps-bootiso vm-help vm-create vm-boot vm-stop vm-delete vm-ssh vm-bootiso vm-list vm-info clean
 
 QOS_PROFILE ?= server
 RUN_PROFILE ?= $(word 2,$(MAKECMDGOALS))
@@ -42,7 +42,9 @@ help:
 		'live         - boot the live ISO in QEMU (run builder/tools/qemu-host-net-up.sh first for tap mode)' \
 		'qemu         - boot from the installed disk (run builder/tools/qemu-host-net-up.sh first for tap mode)' \
 		'bootiso-help    - show bootiso-remote usage (copy ISO to host and boot)' \
-		'vps-bootiso HOST=<ip> [PORT=22] [USER=emo] [PASS=emo2500] - boot ISO on VPS with 10m safety timeout' \
+		'vps-upload-iso HOST=<ip> [PORT=22] [USER=emo] [PASS=emo2500] - upload ISO to VPS only' \
+		'vps-run-iso HOST=<ip> [PORT=22] [USER=emo] [PASS=emo2500] - run previously uploaded ISO on VPS' \
+		'vps-bootiso HOST=<ip> [PORT=22] [USER=emo] [PASS=emo2500] - upload ISO then run it on VPS' \
 		'vm-help         - show VirtualBox VM management commands' \
 		'vm-create PROFILE=<profile> - create VirtualBox VM (server|desktop)' \
 		'vm-boot PROFILE=<profile>   - start and boot VM' \
@@ -164,13 +166,37 @@ bootiso-remote:
 		-P "$${PASS:-root}" \
 		-i "$$ISO_FILE"
 
-vps-bootiso:
-	@test -n "$(HOST)" || { echo "Usage: make vps-bootiso HOST=<ip> [PORT=22] [USER=emo] [PASS=emo2500] [ISO=dist/qos-server.iso]"; echo "Example: make vps-bootiso HOST=162.141.92.102"; exit 1; }
-	@VPS_HOST="$(HOST)" \
+vps-upload-iso:
+	@test -n "$(HOST)" || { echo "Usage: make vps-upload-iso HOST=<ip> [PORT=22] [USER=emo] [PASS=emo2500] [ISO=dist/qos-server.iso]"; exit 1; }
+	@VPS_BOOTISO_MODE=upload \
+	VPS_HOST="$(HOST)" \
 	VPS_PORT="$${PORT:-22}" \
 	VPS_USER="$${USER:-emo}" \
 	VPS_PASS="$${PASS:-emo2500}" \
 	ISO_FILE="$${ISO:-dist/qos-server.iso}" \
+	REMOTE_ISO="$${REMOTE_ISO:-/mnt/qos-state/qos-server.iso}" \
+	bash builder/tools/vps-bootiso.sh
+
+vps-run-iso:
+	@test -n "$(HOST)" || { echo "Usage: make vps-run-iso HOST=<ip> [PORT=22] [USER=emo] [PASS=emo2500] [ISO=dist/qos-server.iso]"; exit 1; }
+	@VPS_BOOTISO_MODE=run \
+	VPS_HOST="$(HOST)" \
+	VPS_PORT="$${PORT:-22}" \
+	VPS_USER="$${USER:-emo}" \
+	VPS_PASS="$${PASS:-emo2500}" \
+	ISO_FILE="$${ISO:-dist/qos-server.iso}" \
+	REMOTE_ISO="$${REMOTE_ISO:-/mnt/qos-state/qos-server.iso}" \
+	bash builder/tools/vps-bootiso.sh
+
+vps-bootiso:
+	@test -n "$(HOST)" || { echo "Usage: make vps-bootiso HOST=<ip> [PORT=22] [USER=emo] [PASS=emo2500] [ISO=dist/qos-server.iso]"; echo "Example: make vps-bootiso HOST=162.141.92.102"; exit 1; }
+	@VPS_BOOTISO_MODE=all \
+	VPS_HOST="$(HOST)" \
+	VPS_PORT="$${PORT:-22}" \
+	VPS_USER="$${USER:-emo}" \
+	VPS_PASS="$${PASS:-emo2500}" \
+	ISO_FILE="$${ISO:-dist/qos-server.iso}" \
+	REMOTE_ISO="$${REMOTE_ISO:-/mnt/qos-state/qos-server.iso}" \
 	bash builder/tools/vps-bootiso.sh
 
 vm-help:

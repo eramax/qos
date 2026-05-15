@@ -315,12 +315,6 @@ else
 fi
 ok "Rootfs copied"
 
-if [ -x "$MNTBASE/root/usr/bin/cloud-init" ]; then
-    chroot "$MNTBASE/root" /usr/bin/cloud-init clean --logs >/dev/null 2>&1 || true
-    rm -rf "$MNTBASE/root/var/lib/cloud"/*
-    rm -f "$MNTBASE/root/var/log/cloud-init.log" "$MNTBASE/root/var/log/cloud-init-output.log"
-fi
-
 # ── Step 5: Create essential directories ─────────────────────────────────────
 for _d in proc sys dev run tmp var boot/efi; do
     mkdir -p "$MNTBASE/root/$_d"

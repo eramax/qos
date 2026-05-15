@@ -26,9 +26,6 @@ dcron
 # QEMU guest agent
 qemu-guest-agent
 
-# Cloud instance initialization
-cloud-init
-
 # Filesystem tools (needed by qos-install for GPT and mkfs)
 # e2fsprogs-extra provides mke2fs, mkfs.ext2/3/4, chattr, lsattr
 # mtools provides mcopy/mmd for EFI partition access without mounting

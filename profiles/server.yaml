@@ -9,6 +9,6 @@ qemu:
     QEMU_NET_MODE=tap QEMU_BRIDGE_IFACE=br0 QEMU_HOSTFWD_PORT=2222
     builder/tools/boot-image.sh --qemu-iso dist/qos-server.iso
 components:
-  - cluster-k3s
-  - cloud-init
+  # - cluster-k3s
+  - seed-reader
   - bootiso

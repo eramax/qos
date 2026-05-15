@@ -3,16 +3,14 @@ set -eu
 
 PATH=/usr/sbin:/usr/bin:/sbin:/bin
 
-cloud_local_done="/run/qos/cloud-init-local.done"
-cloud_final_done="/run/qos/cloud-init.done"
+seed_done="/run/qos/seed-reader.done"
 
-# Wait for cloud-init to finish so it can render the network config
-# from datasources (NoCloud, ConfigDrive, etc).  On VPS providers this
-# gives us a static IP; on VirtualBox there is no datasource so we get
-# nothing and fall through to DHCP.
-if command -v cloud-init >/dev/null 2>&1; then
+# Wait for seed-reader to finish so it can render static config from
+# cidata. If no seed media exists it still drops the done marker and
+# networking falls through to generic DHCP.
+if [ -x /usr/libexec/qos-seed-reader ]; then
   wait_count=0
-  while [ ! -f "$cloud_final_done" ] && [ "$wait_count" -lt 60 ]; do
+  while [ ! -f "$seed_done" ] && [ "$wait_count" -lt 60 ]; do
     sleep 1
     wait_count=$((wait_count + 1))
   done
@@ -49,7 +47,7 @@ echo "networking: $iface link up, carrier=$carrier"
 
 if command -v ifup >/dev/null 2>&1 && [ -f /etc/network/interfaces ]; then
   # ifupdown-ng strictly requires an explicit netmask and fails if only CIDR is provided.
-  # cloud-init eni renderer writes CIDR (e.g. address 1.2.3.4/24), so we dynamically patch it.
+  # seed-reader writes CIDR addresses (e.g. address 1.2.3.4/24), so we patch them here.
   awk '
   /^[[:space:]]*address[[:space:]]+[0-9a-fA-F:\.]+\/[0-9]+/ {
       line = $0;
@@ -89,6 +87,10 @@ fi
 /bin/busybox ip link set dev "$iface" up 2>/dev/null || true
 
 if ip -4 addr show dev "$iface" | grep -q 'inet '; then
+  if [ -x /etc/qos/seed-bootcmd ] && [ ! -f /run/qos/seed-bootcmd.done ]; then
+    sh /etc/qos/seed-bootcmd >/dev/null 2>&1 || true
+    : > /run/qos/seed-bootcmd.done
+  fi
   exec sleep 2147483647
 fi
 
