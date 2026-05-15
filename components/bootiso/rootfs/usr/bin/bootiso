@@ -29,7 +29,7 @@ done
 [ -n "$ISO" ] || { usage >&2; exit 1; }
 [ -f "$ISO" ] || { echo "bootiso: file not found: $ISO" >&2; exit 1; }
 
-for _cmd in kexec mount umount cpio mktemp; do
+for _cmd in kexec mount umount cpio mktemp lz4; do
     command -v "$_cmd" >/dev/null 2>&1 || { echo "bootiso: required tool missing: $_cmd" >&2; exit 1; }
 done
 
@@ -66,14 +66,23 @@ done
 
 EMBEDDED_ROOTFS="$WORK/rootfs.sfs"
 EXTRA_INITRD="$WORK/rootfs.cpio"
+DECOMPRESSED_INITRD="$WORK/initramfs-raw.cpio"
 COMBINED_INITRD="$WORK/initramfs-kexec.img"
 
 cp "$MNT/rootfs.sfs" "$EMBEDDED_ROOTFS"
 (
     cd "$WORK"
-    printf '%s\n' rootfs.sfs | cpio -o -H newc > "$EXTRA_INITRD" 2>/dev/null
-)
-cat "$INITRD" "$EXTRA_INITRD" > "$COMBINED_INITRD"
+    printf '%s\n' rootfs.sfs | cpio -o -H newc > "$EXTRA_INITRD"
+) || { echo "bootiso: failed to create rootfs cpio" >&2; exit 1; }
+
+# Decompress the lz4-compressed initramfs from the ISO, then merge with rootfs.
+# Concatenating a raw cpio to a compressed stream is unreliable — the kernel
+# may not process the trailing chunk after lz4 decompression.
+lz4 -d < "$INITRD" > "$DECOMPRESSED_INITRD" || {
+    echo "bootiso: failed to decompress initramfs (missing lz4?)" >&2
+    exit 1
+}
+cat "$DECOMPRESSED_INITRD" "$EXTRA_INITRD" > "$COMBINED_INITRD"
 
 echo "bootiso: kernel  -> $VMLINUZ"
 echo "bootiso: initrd  -> $INITRD + embedded rootfs.sfs"
@@ -81,7 +90,16 @@ echo "bootiso: loading kernel via kexec ..."
 
 kexec -u 2>/dev/null || true
 
+# Build cmdline: preserve console/earlycon/loglevel from current kernel,
+# add boot=live, and append any extra args from the environment.
 CMDLINE="boot=live"
+for _arg in $(cat /proc/cmdline); do
+    case "$_arg" in
+        console=*|earlycon=*|loglevel=*|ignore_loglevel|net.ifnames=*|biosdevname=*|root=*|rootfstype=*|rootwait|ro|rw|init=*|quiet)
+            CMDLINE="$CMDLINE $_arg"
+            ;;
+    esac
+done
 if [ -n "$BOOTISO_CMDLINE_EXTRA" ]; then
     CMDLINE="$CMDLINE $BOOTISO_CMDLINE_EXTRA"
 fi

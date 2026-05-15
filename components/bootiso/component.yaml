@@ -1,3 +1,4 @@
 name: bootiso
 packages:
   - kexec-tools
+  - lz4

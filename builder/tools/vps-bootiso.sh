@@ -65,9 +65,51 @@ verify_connectivity() {
 }
 
 ensure_remote_storage() {
-    _ssh "sudo sh -c 'mkdir -p /mnt/qos-state && (grep -q \" /mnt/qos-state \" /proc/mounts || mount /dev/vda3 /mnt/qos-state)'" 2>&1 || {
-        warn "Could not ensure /mnt/qos-state is mounted; upload may fail"
+    # On an installed QOS system, the state partition is already mounted
+    # with /home bind-mounted from it. Use /home for persistent storage.
+    if _ssh "test -d /home/${VPS_USER}" 2>/dev/null; then
+        REMOTE_ISO="/home/${VPS_USER}/qos-server.iso"
+        return 0
+    fi
+
+    # Live CD: state partition is not mounted, mount it manually.
+    _ssh "sudo sh -c 'mkdir -p /mnt/qos-state && (grep -q \" /mnt/qos-state \" /proc/mounts || mount /dev/vda3 /mnt/qos-state || mount /dev/sda3 /mnt/qos-state)'" 2>&1 || {
+        warn "Could not mount state partition; upload may be ephemeral"
     }
+}
+
+upload_via_scp() {
+    local REMOTE_TMP="/tmp/.qos-iso-upload-$$.iso"
+
+    log "Uploading ISO to $REMOTE_ISO (scp) ..."
+    sshpass -p "$VPS_PASS" scp -O \
+        -o StrictHostKeyChecking=no \
+        -o UserKnownHostsFile=/dev/null \
+        -o ConnectTimeout=10 \
+        -P "$VPS_PORT" \
+        "$ISO_FILE" \
+        "${VPS_USER}@${VPS_HOST}:${REMOTE_TMP}" 2>/dev/null || return 1
+
+    log "Moving ISO to final location..."
+    _ssh "sudo mv '$REMOTE_TMP' '$REMOTE_ISO' && sudo sync" || {
+        _ssh "rm -f '$REMOTE_TMP'" 2>/dev/null || true
+        return 1
+    }
+    return 0
+}
+
+upload_via_pipe() {
+    log "Uploading ISO to $REMOTE_ISO (pipe) ..."
+    if ! sshpass -p "$VPS_PASS" ssh \
+        -o StrictHostKeyChecking=no \
+        -o UserKnownHostsFile=/dev/null \
+        -o ConnectTimeout=10 \
+        -p "$VPS_PORT" \
+        "${VPS_USER}@${VPS_HOST}" \
+        "sudo sh -c 'cat > \"$REMOTE_ISO\" && sync'" < "$ISO_FILE" 2>/dev/null; then
+        return 1
+    fi
+    return 0
 }
 
 upload_iso() {
@@ -76,26 +118,10 @@ upload_iso() {
     extract_expected_version
     ensure_remote_storage
 
-    local REMOTE_TMP="/tmp/.qos-iso-upload-$$.iso"
-
-    log "Uploading ISO to $REMOTE_ISO ..."
-    sshpass -p "$VPS_PASS" scp -O \
-        -o StrictHostKeyChecking=no \
-        -o UserKnownHostsFile=/dev/null \
-        -o ConnectTimeout=10 \
-        -P "$VPS_PORT" \
-        "$ISO_FILE" \
-        "${VPS_USER}@${VPS_HOST}:${REMOTE_TMP}" || {
-        err "SCP upload failed"
-        exit 1
-    }
-
-    log "Moving ISO to final location..."
-    _ssh "sudo mv '$REMOTE_TMP' '$REMOTE_ISO' && sudo sync" || {
-        err "Failed to move ISO to $REMOTE_ISO"
-        _ssh "rm -f '$REMOTE_TMP'" 2>/dev/null || true
-        exit 1
-    }
+    if ! upload_via_scp; then
+        warn "SCP upload failed, falling back to pipe method"
+        upload_via_pipe || { err "Pipe upload failed"; exit 1; }
+    fi
 
     log "Verifying uploaded ISO checksum..."
     local remote_sha
@@ -136,7 +162,7 @@ run_iso() {
         -o ConnectTimeout=5 \
         -p "$VPS_PORT" \
         "${VPS_USER}@${VPS_HOST}" \
-        "sudo env BOOTISO_CMDLINE_EXTRA='panic=60' bootiso '$REMOTE_ISO'" >/dev/null 2>&1 || true
+        "sudo env BOOTISO_CMDLINE_EXTRA='panic=60' bootiso '$REMOTE_ISO'" 2>&1 || true
     log "bootiso triggered — VPS is rebooting into QOS ISO"
 
     log ""
