@@ -98,7 +98,7 @@ export HOME=/home/emo
 [ -f ~/.bashrc ] && . ~/.bashrc
 PROFILE
   cat > "$rootfs/home/emo/.bashrc" <<'BASHRC'
-export PS1='emo@qos:~$ '
+export PS1='\u@\h:\w\$ '
 export LANG=C.UTF-8
 export CHARSET=UTF-8
 BASHRC
