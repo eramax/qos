@@ -48,7 +48,7 @@ INITRD=""
 for _k in vmlinuz boot/vmlinuz live/vmlinuz casper/vmlinuz; do
     [ -f "$MNT/$_k" ] && VMLINUZ="$MNT/$_k" && break
 done
-for _i in initrd.img boot/initrd.img live/initrd.img casper/initrd.lz casper/initrd; do
+for _i in initramfs-live.img initrd.img boot/initrd.img live/initrd.img casper/initrd.lz casper/initrd; do
     [ -f "$MNT/$_i" ] && INITRD="$MNT/$_i" && break
 done
 

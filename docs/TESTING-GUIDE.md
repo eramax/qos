@@ -31,7 +31,7 @@ sshpass -p emo2500 ssh -o StrictHostKeyChecking=no -p 2222 emo@localhost "which 
 make vm-ssh PROFILE=server  # or run: sshpass -p emo2500 ssh -o StrictHostKeyChecking=no -p 2222 emo@localhost
 
 # 9. Boot desktop ISO via bootiso
-make vm-bootiso PROFILE=server ISO=dist/qos-desktop.iso
+make vm-bootiso PROFILE=server ISO=dist/qos-server.iso
 
 # 10. Stop and clean up
 make vm-stop PROFILE=server
