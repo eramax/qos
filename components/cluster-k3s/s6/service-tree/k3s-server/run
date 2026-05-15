@@ -25,7 +25,11 @@ fi
 
 # --write-kubeconfig-mode=0644 so non-root operators can use `k9s`
 # without sudo. Tighten if this becomes multi-tenant.
+# Link CNI plugins if they are not in PATH
+ln -sf /usr/libexec/cni/* /usr/bin/ || true
+
 exec k3s server \
     --data-dir "$state_dir" \
     --write-kubeconfig-mode=0644 \
+    --snapshotter native \
     ${K3S_EXTRA_ARGS:-}
