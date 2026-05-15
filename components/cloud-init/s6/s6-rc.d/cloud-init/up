@@ -34,6 +34,13 @@ if ! cloud-init init; then
     exit 0
 fi
 
+# Apply network config if it has a static IP (VPS providers like NoCloud).
+# Don't restart for dhcp-only configs — cloud-init-local already removed those.
+if [ -f /etc/network/interfaces ] && grep -q 'inet static\|inet manual\|address ' /etc/network/interfaces 2>/dev/null; then
+    echo "cloud-init: applying static network configuration"
+    /sbin/ifup -a || true
+fi
+
 if ! cloud-init modules --mode=config; then
     echo "cloud-init: config stage failed" >&2
     : > "$final_done"
