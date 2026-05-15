@@ -4,7 +4,7 @@
 # Only print for interactive shells unless a test explicitly forces it.
 case "$-" in
   *i*) ;;
-  *) [ "${QOS_BANNER_FORCE:-0}" = "1" ] || return 0 2>/dev/null || exit 0 ;;
+  *) [ "${QOS_BANNER_FORCE:-0}" = "1" ] || return 0 || exit 0 ;;
 esac
 
 qos_root="${QOS_ROOTFS:-/}"
@@ -17,11 +17,11 @@ ip_bin="${QOS_IP_BIN:-ip}"
 
 qos_version="QOS build: unknown"
 if [ -r "$version_file" ]; then
-  qos_version="$(cat "$version_file" 2>/dev/null || printf '%s' "$qos_version")"
+  qos_version="$(cat "$version_file" || printf '%s' "$qos_version")"
 fi
 
-kernel_version="$(uname -r 2>/dev/null || printf 'unknown')"
-mem_kib="$(awk '/^MemTotal:/ { print $2; exit }' "$meminfo_file" 2>/dev/null || printf '0')"
+kernel_version="$(uname -r || printf 'unknown')"
+mem_kib="$(awk '/^MemTotal:/ { print $2; exit }' "$meminfo_file" || printf '0')"
 case "$mem_kib" in
   ''|*[!0-9]*) mem_kib=0 ;;
 esac
@@ -39,9 +39,9 @@ uptime_minutes="$(awk '{
   } else {
     printf "%dm", m
   }
-}' "$uptime_file" 2>/dev/null || printf 'unknown')"
+}' "$uptime_file" || printf 'unknown')"
 
-ipv4_addr="$("$ip_bin" -o -4 addr show scope global 2>/dev/null | awk '
+ipv4_addr="$("$ip_bin" -o -4 addr show scope global | awk '
   {
     for (i = 1; i <= NF; i++) {
       if ($i == "inet") {
@@ -53,7 +53,7 @@ ipv4_addr="$("$ip_bin" -o -4 addr show scope global 2>/dev/null | awk '
 ')"
 [ -n "$ipv4_addr" ] || ipv4_addr="none"
 
-ipv6_addr="$("$ip_bin" -o -6 addr show scope global 2>/dev/null | awk '
+ipv6_addr="$("$ip_bin" -o -6 addr show scope global | awk '
   {
     for (i = 1; i <= NF; i++) {
       if ($i == "inet6") {
@@ -65,10 +65,10 @@ ipv6_addr="$("$ip_bin" -o -6 addr show scope global 2>/dev/null | awk '
 ')"
 [ -n "$ipv6_addr" ] || ipv6_addr="none"
 
-disk_line="$(df -h "$df_path" 2>/dev/null | awk 'NR==2 { printf "%s total, %s used, %s free (%s used)", $2, $3, $4, $5 }')"
+disk_line="$(df -h "$df_path" | awk 'NR==2 { printf "%s total, %s used, %s free (%s used)", $2, $3, $4, $5 }')"
 [ -n "$disk_line" ] || disk_line="unknown"
 
-boot_source="$(cat "$boot_source_file" 2>/dev/null || true)"
+boot_source="$(cat "$boot_source_file" || true)"
 
 printf '\n'
 cat <<'EOF'

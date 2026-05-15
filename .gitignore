@@ -1,4 +1,5 @@
 .worktrees/
 build/
 dist/
-virtualbox/qos/
+virtualbox/qos-*/
+!virtualbox/create-vm.sh

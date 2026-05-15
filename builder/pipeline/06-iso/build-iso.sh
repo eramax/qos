@@ -102,9 +102,10 @@ done < <("$live_stage/bin/busybox" --list)
 
 cat > "$live_stage/init" <<'LIVE_INIT'
 #!/bin/busybox sh
-# Live CD init — static early userspace. The full rootfs is stored as
-# rootfs.sfs on the runtime ISO device that QEMU also exposes as a
-# separate read-only block disk.
+# Live CD init — static early userspace. The full rootfs normally lives
+# in rootfs.sfs on the runtime ISO block device. For kexec boot paths we
+# can also embed rootfs.sfs directly into the initramfs to avoid falling
+# back to an older still-attached CD-ROM.
 PATH=/bin
 exec >/dev/console 2>&1
 echo "[live-init] QOS Live CD starting..."
@@ -115,31 +116,43 @@ mount -t devtmpfs devtmpfs /dev || { echo "[live-init] FATAL: devtmpfs mount fai
 mount -t tmpfs tmpfs /run || { echo "[live-init] FATAL: tmpfs mount failed"; exec sh; }
 echo "[live-init] kernel cmdline: $(cat /proc/cmdline)"
 
-echo "[live-init] Searching for rootfs.sfs..."
-live_dev=""
-ls -l /dev/sr0 2>/dev/null || true
-for dev in /dev/sr0 /dev/vd* /dev/sd* /dev/sr* /dev/nvme*n*; do
-  [ -b "$dev" ] || continue
-  if mount -t iso9660 -o ro "$dev" /mnt/live 2>/dev/null; then
-    if [ -f /mnt/live/rootfs.sfs ]; then
-      live_dev="$dev"
-      break
-    fi
-    umount /mnt/live 2>/dev/null || true
-  fi
-done
+rootfs_source=""
+if [ -f /rootfs.sfs ]; then
+  rootfs_source="/rootfs.sfs"
+  echo "[live-init] Using embedded rootfs.sfs from initramfs"
+else
+  echo "[live-init] Searching for rootfs.sfs..."
+  live_dev=""
+  _retry=0
+  while [ "$_retry" -lt 10 ]; do
+    for dev in /dev/sr0 /dev/vd* /dev/sd* /dev/sr* /dev/nvme*n*; do
+      [ -b "$dev" ] || continue
+      if mount -t iso9660 -o ro "$dev" /mnt/live 2>/dev/null; then
+        if [ -f /mnt/live/rootfs.sfs ]; then
+          live_dev="$dev"
+          rootfs_source="/mnt/live/rootfs.sfs"
+          break 2
+        fi
+        umount /mnt/live 2>/dev/null || true
+      fi
+    done
+    _retry=$((_retry + 1))
+    sleep 1
+  done
 
-if [ -z "$live_dev" ]; then
-  echo "[live-init] FATAL: rootfs.sfs not found on any runtime block device"
-  echo "[live-init] /proc/partitions:"
-  cat /proc/partitions
-  exec sh
+  if [ -z "$live_dev" ]; then
+    echo "[live-init] FATAL: rootfs.sfs not found in initramfs or on any runtime block device"
+    echo "[live-init] /proc/partitions:"
+    cat /proc/partitions
+    exec sh
+  fi
+
+  echo "[live-init] runtime ISO device: $live_dev"
 fi
 
-echo "[live-init] runtime ISO device: $live_dev"
-echo "[live-init] Mounting rootfs.sfs..."
+echo "[live-init] Mounting rootfs.sfs from $rootfs_source..."
 mkdir -p /ro-root
-mount -t squashfs -o loop,ro /mnt/live/rootfs.sfs /ro-root \
+mount -t squashfs -o loop,ro "$rootfs_source" /ro-root \
   || { echo "[live-init] FATAL: squashfs mount failed"; exec sh; }
 
 mkdir -p /run/overlay/upper /run/overlay/work /sysroot
@@ -150,18 +163,12 @@ mount -t overlay overlay \
 mkdir -p /sysroot/proc /sysroot/sys /sysroot/dev /sysroot/dev/pts /sysroot/run /sysroot/tmp
 
 # Make /etc and /etc/qos writable in the overlay so we can stamp the
-# live-boot identity and disable cloud-init.
+# live-boot identity.
 chmod u+w /sysroot/etc 2>/dev/null || true
 echo "qos-live" > /sysroot/etc/hostname
 echo "qos-live" > /proc/sys/kernel/hostname 2>/dev/null
 mkdir -p /sysroot/etc/qos
 echo "live-cdrom" > /sysroot/etc/qos/boot-source
-
-# Ensure cloud-init is enabled on the live CD so it can configure network and SSH via cloud metadata.
-chmod u+w /sysroot/etc/cloud 2>/dev/null || true
-mkdir -p /sysroot/etc/cloud/cloud.cfg.d
-rm -f /sysroot/etc/cloud/cloud.cfg.d/99-qos-live-disable.cfg
-rm -f /sysroot/etc/cloud-init.disabled
 
 echo "[live-init] Mounting essential filesystems..."
 mkdir -p /sysroot/sys/fs/cgroup /sysroot/dev/pts
@@ -181,15 +188,25 @@ mount -t tmpfs tmpfs /sysroot/run
 mount -t tmpfs tmpfs /sysroot/tmp -o nosuid,nodev,mode=1777 2>/dev/null || true
 
 # Fix ownership lost when rootfs is built as non-root.
-# Dropbear requires /root/.ssh to be owned by root.
+# Only fix specific critical paths — a full recursive chown copies every file
+# into the tmpfs-backed overlay upper dir, exhausting space on 1GB RAM VMs.
 echo "[live-init] Fixing rootfs ownership..."
-chown -R 0:0 /sysroot 2>/dev/null || true
+chown 0:0 /sysroot/root 2>/dev/null || true
+chown -R 0:0 /sysroot/root/.ssh 2>/dev/null || true
+chmod 700 /sysroot/root/.ssh 2>/dev/null || true
+chown 0:0 /sysroot/etc/shadow 2>/dev/null || true
+chmod 640 /sysroot/etc/shadow 2>/dev/null || true
 chown -R 1000:1000 /sysroot/home/emo 2>/dev/null || true
 
 # Fix setuid binaries
+chown 0:0 /sysroot/usr/bin/sudo 2>/dev/null || true
 chmod 4755 /sysroot/usr/bin/sudo 2>/dev/null || true
+chown 0:0 /sysroot/usr/bin/su 2>/dev/null || true
 chmod 4755 /sysroot/usr/bin/su 2>/dev/null || true
+chown 0:0 /sysroot/etc/sudoers 2>/dev/null || true
 chmod 0440 /sysroot/etc/sudoers 2>/dev/null || true
+chown 0:0 /sysroot/etc/sudo.conf 2>/dev/null || true
+chown 0:0 /sysroot/etc/sudoers.d 2>/dev/null || true
 
 echo "[live-init] Switching to live rootfs..."
 exec switch_root /sysroot /sbin/init
@@ -244,7 +261,7 @@ interface_branding_colour: 6
     protocol: linux
     kernel_path: boot():/vmlinuz
     module_path: boot():/initramfs-live.img
-    cmdline: rdinit=/init qos.live=1 video=Virtual-1:1920x1080@60 console=tty0 console=ttyS0,115200n8 earlycon=uart,io,0x3f8,115200n8 loglevel=7 net.ifnames=0 biosdevname=0
+    cmdline: rdinit=/init qos.live=1 panic=60 video=Virtual-1:1920x1080@60 console=tty0 console=ttyS0,115200n8 earlycon=uart,io,0x3f8,115200n8 loglevel=7 net.ifnames=0 biosdevname=0
 EOF
 mcopy -i "$esp_img" "$iso_build_dir/limine-live.conf" ::/limine.conf
 mcopy -i "$esp_img" "$boot_dir/vmlinuz"               ::/vmlinuz
@@ -261,6 +278,12 @@ mkdir -p "$iso_root"
 # Put the ESP image at the ISO root; xorriso uses it as the EFI boot entry.
 cp "$esp_img" "$iso_root/efi.img"
 cp "$rootfs_sfs" "$iso_root/rootfs.sfs"
+
+# Put the kernel and live initramfs at the ISO root so bootiso can find
+# them when mounting the ISO directly (they are also inside efi.img for
+# Limine's boot() protocol).
+cp "$boot_dir/vmlinuz" "$iso_root/vmlinuz"
+cp "$live_initramfs" "$iso_root/initramfs-live.img"
 
 # Copy BOOTX64.EFI into the ISO filesystem at /EFI/BOOT/ so OVMF can find
 # it when scanning the optical drive as a filesystem (avoids skipping the

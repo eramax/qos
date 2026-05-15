@@ -1,15 +1,20 @@
 #!/bin/sh
 set -eu
 
-_n=0; while [ ! -e /dev/dri/card0 ] && [ "$_n" -lt 120 ]; do sleep 0.25; _n=$((_n+1)); done
-
+# Fix /dev/null permissions immediately — other services may redirect to it.
 chmod 666 /dev/null 2>/dev/null || true
 chmod 666 /run/seatd.sock 2>/dev/null || true
+
+# Wait for DRI card (GPU)
+_n=0; while [ ! -e /dev/dri/card0 ] && [ "$_n" -lt 120 ]; do sleep 0.25; _n=$((_n+1)); done
+
+# Fix GPU permissions for video group
 chown root:video /dev/dri/card0 /dev/dri/renderD128 2>/dev/null || true
 chmod 660 /dev/dri/card0 /dev/dri/renderD128 2>/dev/null || true
 
 # Disable PS/2 mouse to avoid cursor offset (USB tablet is absolute)
 for dev in /sys/class/input/*/device/name; do
+  [ -e "$dev" ] || continue
   read name < "$dev" 2>/dev/null || continue
   case "$name" in
     *Explorer*Mouse*|*PS/2*Mouse*)
@@ -17,5 +22,3 @@ for dev in /sys/class/input/*/device/name; do
       ;;
   esac
 done
-
-exec sleep 2147483647

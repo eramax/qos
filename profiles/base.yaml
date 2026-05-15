@@ -21,6 +21,7 @@ components:
   - qemu-guest-agent
   - zram
   - console
+  - console-vga
   - mdev-coldplug
   - dns
   - capabilities

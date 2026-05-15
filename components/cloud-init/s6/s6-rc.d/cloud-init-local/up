@@ -1,0 +1,70 @@
+#!/bin/sh
+set -eu
+
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+
+state_dir="/run/qos"
+done_marker="$state_dir/cloud-init-local.done"
+
+mkdir -p "$state_dir"
+
+has_local_seed_device() {
+    if command -v blkid >/dev/null 2>&1; then
+        blkid 2>/dev/null | grep -qiE 'LABEL="(cidata|config-2)"'
+        return $?
+    fi
+    return 1
+}
+
+if [ -f /etc/cloud-init.disabled ] || grep -q 'cloud-init=off' /proc/cmdline 2>/dev/null; then
+    : > "$done_marker"
+    exit 0
+fi
+
+if ! command -v cloud-init >/dev/null 2>&1; then
+    : > "$done_marker"
+    exit 0
+fi
+
+# On VPS boots, the cloud-init seed ISO may appear shortly after the service
+# starts. Wait a bit for mdev coldplug and for cidata/config-2 media so
+# cloud-init can detect NoCloud/ConfigDrive instead of falling through early.
+wait_count=0
+while [ "$wait_count" -lt 15 ]; do
+    if [ -f "$state_dir/mdev-coldplug.done" ] && has_local_seed_device; then
+        break
+    fi
+    sleep 1
+    wait_count=$((wait_count + 1))
+done
+
+if ! cloud-init init --local; then
+    echo "cloud-init-local: init --local failed, continuing with fallback networking" >&2
+fi
+
+# Cloud-init may render an ENI network config with "dhcp" method that
+# ifupdown-ng does not support, or an incomplete config. Ensure eth0 has
+# a working configuration before handing off to the networking service.
+if [ -f /etc/network/interfaces ]; then
+    dhcp_only="$(grep -c 'inet dhcp' /etc/network/interfaces 2>/dev/null || true)"
+    static_line="$(grep -c 'inet static\|inet manual\|address ' /etc/network/interfaces 2>/dev/null || true)"
+    if [ "$dhcp_only" -gt 0 ] && [ "$static_line" -eq 0 ]; then
+        echo "cloud-init-local: removing dhcp-only /etc/network/interfaces (ifupdown-ng lacks dhcp support)"
+        rm -f /etc/network/interfaces
+    fi
+fi
+
+# If no interfaces file or it's missing an eth0 method, write a minimal config.
+# Use "inet manual" so ifupdown-ng skips it and udhcpc can configure the interface.
+if [ ! -f /etc/network/interfaces ] || ! grep -q 'iface eth0' /etc/network/interfaces 2>/dev/null; then
+    echo "cloud-init-local: writing manual config for eth0 (udhcpc will handle DHCP)"
+    cat > /etc/network/interfaces <<'IFACES'
+auto lo
+iface lo inet loopback
+
+auto eth0
+iface eth0 inet manual
+IFACES
+fi
+
+: > "$done_marker"

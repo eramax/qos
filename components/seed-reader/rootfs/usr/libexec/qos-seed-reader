@@ -1,0 +1,276 @@
+#!/bin/sh
+set -eu
+
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+
+ROOT_DIR="${QOS_SEED_READER_ROOT:-/}"
+SYS_CLASS_NET="${QOS_SEED_READER_SYS_CLASS_NET:-$ROOT_DIR/sys/class/net}"
+SEED_DIRS="${QOS_SEED_READER_SEED_DIRS:-}"
+
+root_path() {
+    _path="${1#/}"
+    if [ "$ROOT_DIR" = "/" ]; then
+        printf '/%s\n' "$_path"
+    else
+        printf '%s/%s\n' "${ROOT_DIR%/}" "$_path"
+    fi
+}
+
+RUN_DIR="$(root_path /run/qos)"
+QOS_DIR="$(root_path /etc/qos)"
+SEED_SOURCE="$QOS_DIR/seed-source"
+SEED_BOOTCMD="$QOS_DIR/seed-bootcmd"
+SEED_DONE="$RUN_DIR/seed-reader.done"
+
+yq_read() {
+    _file="$1"
+    _filter="$2"
+    if yq --version 2>/dev/null | grep -qi 'mikefarah'; then
+        yq -o=json '.' "$_file" 2>/dev/null | jq -r "$_filter" 2>/dev/null || true
+    else
+        yq '.' "$_file" 2>/dev/null | jq -r "$_filter" 2>/dev/null || true
+    fi
+}
+
+detect_iface() {
+    _target_mac="${1:-}"
+    _fallback="$2"
+
+    if [ -n "$_target_mac" ] && [ -d "$SYS_CLASS_NET" ]; then
+        _target_mac="$(printf '%s' "$_target_mac" | tr '[:upper:]' '[:lower:]')"
+        for _addr in "$SYS_CLASS_NET"/*/address; do
+            [ -f "$_addr" ] || continue
+            _current="$(tr '[:upper:]' '[:lower:]' < "$_addr" | tr -d '\n')"
+            if [ "$_current" = "$_target_mac" ]; then
+                basename "$(dirname "$_addr")"
+                return 0
+            fi
+        done
+    fi
+
+    printf '%s\n' "$_fallback"
+}
+
+write_hostname() {
+    _meta="$1"
+    _hostname="$(yq_read "$_meta" '.["local-hostname"] // empty')"
+    [ -n "$_hostname" ] || return 0
+
+    printf '%s\n' "$_hostname" > "$(root_path /etc/hostname)"
+    if [ "$ROOT_DIR" = "/" ] && [ -w /proc/sys/kernel/hostname ]; then
+        printf '%s\n' "$_hostname" > /proc/sys/kernel/hostname || true
+    fi
+}
+
+write_resolv_conf() {
+    _tmp="$(mktemp)"
+    cat > "$_tmp"
+    if [ -s "$_tmp" ]; then
+        mv "$_tmp" "$(root_path /etc/resolv.conf)"
+    else
+        rm -f "$_tmp"
+    fi
+}
+
+render_nameservers_from_filter() {
+    _file="$1"
+    _filter="$2"
+
+    yq_read "$_file" "$_filter" | while IFS= read -r _ns; do
+        [ -n "$_ns" ] || continue
+        printf 'nameserver %s\n' "$_ns"
+    done
+}
+
+write_network_config() {
+    _network="$1"
+    [ "$(yq_read "$_network" '(.network // .).version // empty')" = "2" ] || return 0
+
+    _ifile="$(root_path /etc/network/interfaces)"
+    _tmp="$(mktemp)"
+    {
+        printf 'auto lo\n'
+        printf 'iface lo inet loopback\n\n'
+    } > "$_tmp"
+
+    _logical_names="$(yq_read "$_network" '(.network // .).ethernets | keys[]?')"
+    [ -n "$_logical_names" ] || { mv "$_tmp" "$_ifile"; return 0; }
+
+    _resolv_tmp="$(mktemp)"
+    : > "$_resolv_tmp"
+
+    printf '%s\n' "$_logical_names" | while IFS= read -r _logical_name; do
+        [ -n "$_logical_name" ] || continue
+
+        _match_mac="$(yq_read "$_network" "(.network // .).ethernets[\"$_logical_name\"].match.macaddress // empty")"
+        _iface="$(detect_iface "$_match_mac" "$_logical_name")"
+        _ipv4=""
+        _ipv6=""
+
+        yq_read "$_network" "(.network // .).ethernets[\"$_logical_name\"].addresses[]?" | while IFS= read -r _addr; do
+            [ -n "$_addr" ] || continue
+            if [ -z "$_ipv4" ] && printf '%s' "$_addr" | grep -q '\.'; then
+                _ipv4="$_addr"
+                printf 'IPV4=%s\n' "$_ipv4" > "$_resolv_tmp.ipv4.$$"
+            elif [ -z "$_ipv6" ] && printf '%s' "$_addr" | grep -q ':'; then
+                _ipv6="$_addr"
+                printf 'IPV6=%s\n' "$_ipv6" > "$_resolv_tmp.ipv6.$$"
+            fi
+        done
+
+        if [ -f "$_resolv_tmp.ipv4.$$" ]; then
+            # shellcheck disable=SC1090
+            . "$_resolv_tmp.ipv4.$$"
+            _ipv4="${IPV4:-}"
+            rm -f "$_resolv_tmp.ipv4.$$"
+        fi
+        if [ -f "$_resolv_tmp.ipv6.$$" ]; then
+            # shellcheck disable=SC1090
+            . "$_resolv_tmp.ipv6.$$"
+            _ipv6="${IPV6:-}"
+            rm -f "$_resolv_tmp.ipv6.$$"
+        fi
+
+        _gateway4="$(yq_read "$_network" "(.network // .).ethernets[\"$_logical_name\"].gateway4 // empty")"
+        _gateway6="$(yq_read "$_network" "(.network // .).ethernets[\"$_logical_name\"].gateway6 // empty")"
+
+        {
+            printf 'auto %s\n' "$_iface"
+            if [ -n "$_ipv4" ]; then
+                printf 'iface %s inet static\n' "$_iface"
+                printf '    address %s\n' "$_ipv4"
+                [ -n "$_gateway4" ] && printf '    gateway %s\n' "$_gateway4"
+            else
+                printf 'iface %s inet manual\n' "$_iface"
+            fi
+            printf '\n'
+
+            if [ -n "$_ipv6" ] || [ -n "$_gateway6" ]; then
+                printf 'iface %s inet6 static\n' "$_iface"
+                [ -n "$_ipv6" ] && printf '    address %s\n' "$_ipv6"
+                [ -n "$_gateway6" ] && printf '    gateway %s\n' "$_gateway6"
+                printf '\n'
+            fi
+        } >> "$_tmp"
+
+        yq_read "$_network" "(.network // .).ethernets[\"$_logical_name\"].nameservers.addresses[]?" | while IFS= read -r _ns; do
+            [ -n "$_ns" ] || continue
+            printf 'nameserver %s\n' "$_ns" >> "$_resolv_tmp"
+        done
+    done
+
+    mv "$_tmp" "$_ifile"
+    if [ -s "$_resolv_tmp" ]; then
+        mv "$_resolv_tmp" "$(root_path /etc/resolv.conf)"
+    else
+        rm -f "$_resolv_tmp"
+    fi
+}
+
+update_shadow() {
+    _user="$1"
+    _password_hash="$2"
+    _shadow="$(root_path /etc/shadow)"
+    [ -f "$_shadow" ] || return 0
+
+    awk -F: -v user="$_user" -v hash="$_password_hash" 'BEGIN { OFS=":" } $1 == user { $2 = hash } { print }' \
+        "$_shadow" > "$_shadow.tmp"
+    mv "$_shadow.tmp" "$_shadow"
+}
+
+apply_user_data() {
+    _user_data="$1"
+
+    _timezone="$(yq_read "$_user_data" '.timezone // empty')"
+    [ -z "$_timezone" ] || printf '%s\n' "$_timezone" > "$(root_path /etc/timezone)"
+
+    _manage_resolv="$(yq_read "$_user_data" '.manage_resolv_conf // false')"
+    if [ "$_manage_resolv" = "true" ]; then
+        render_nameservers_from_filter "$_user_data" '.resolv_conf.nameservers[]?' | write_resolv_conf
+    fi
+
+    _ssh_dir="$(root_path /root/.ssh)"
+    _keys="$(yq_read "$_user_data" '.users[]? | select(type=="object" and .name == "root") | (.ssh_authorized_keys[]?, .["ssh-authorized-keys"][]?)')"
+    if [ -n "$_keys" ]; then
+        mkdir -p "$_ssh_dir"
+        chmod 700 "$_ssh_dir"
+        printf '%s\n' "$_keys" > "$_ssh_dir/authorized_keys"
+        chmod 600 "$_ssh_dir/authorized_keys"
+    fi
+
+    _hashed="$(yq_read "$_user_data" '.users[]? | select(type=="object" and .name == "root") | (.hashed_passwd // .["hashed-passwd"] // empty)')"
+    [ -z "$_hashed" ] || update_shadow root "$_hashed"
+
+    _bootcmds="$(yq_read "$_user_data" '.bootcmd[]? | select(type=="string")')"
+    if [ -n "$_bootcmds" ]; then
+        mkdir -p "$QOS_DIR"
+        {
+            printf '#!/bin/sh\n'
+            printf 'set -eu\n'
+            printf '%s\n' "$_bootcmds"
+        } > "$SEED_BOOTCMD"
+        chmod 755 "$SEED_BOOTCMD"
+    fi
+}
+
+mount_seed() {
+    _candidate="$1"
+
+    if [ -d "$_candidate" ]; then
+        [ -f "$_candidate/meta-data" ] || return 1
+        [ -f "$_candidate/user-data" ] || [ -f "$_candidate/network-config" ] || return 1
+        printf '%s\n' "$_candidate"
+        return 0
+    fi
+
+    _mount_dir="$(mktemp -d /run/qos-seed.XXXXXX)"
+    if ! mount -o ro -t iso9660 "$_candidate" "$_mount_dir" >/dev/null 2>&1; then
+        rmdir "$_mount_dir" 2>/dev/null || true
+        return 1
+    fi
+
+    if [ ! -f "$_mount_dir/meta-data" ] || { [ ! -f "$_mount_dir/user-data" ] && [ ! -f "$_mount_dir/network-config" ]; }; then
+        umount "$_mount_dir" >/dev/null 2>&1 || true
+        rmdir "$_mount_dir" 2>/dev/null || true
+        return 1
+    fi
+
+    printf '%s\n' "$_mount_dir"
+}
+
+seed_candidates() {
+    if [ -n "$SEED_DIRS" ]; then
+        printf '%s\n' "$SEED_DIRS" | tr ':' '\n'
+        return 0
+    fi
+
+    for _candidate in /dev/sd* /dev/sr* /dev/vd* /dev/nvme*n*; do
+        [ -b "$_candidate" ] || continue
+        printf '%s\n' "$_candidate"
+    done
+}
+
+main() {
+    mkdir -p "$RUN_DIR" "$QOS_DIR"
+
+    seed_candidates | while IFS= read -r _candidate; do
+        [ -n "$_candidate" ] || continue
+        _mount_dir="$(mount_seed "$_candidate" || true)"
+        [ -n "${_mount_dir:-}" ] || continue
+
+        write_hostname "$_mount_dir/meta-data"
+        [ ! -f "$_mount_dir/network-config" ] || write_network_config "$_mount_dir/network-config"
+        [ ! -f "$_mount_dir/user-data" ] || apply_user_data "$_mount_dir/user-data"
+        printf '%s\n' "$_candidate" > "$SEED_SOURCE"
+
+        if [ "$_mount_dir" != "$_candidate" ]; then
+            umount "$_mount_dir" >/dev/null 2>&1 || true
+            rmdir "$_mount_dir" 2>/dev/null || true
+        fi
+        break
+    done
+
+    : > "$SEED_DONE"
+}
+
+main "$@"

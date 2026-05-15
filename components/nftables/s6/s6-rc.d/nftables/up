@@ -5,4 +5,3 @@ set -eu
 # After loading, sleep so s6-svscan does not restart us (which would cause
 # repeated flush/reload cycles that transiently drop all packets).
 /usr/sbin/nft -f /etc/nftables/nftables.conf
-exec sleep 2147483647

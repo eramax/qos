@@ -7,8 +7,13 @@
 
 set -eu
 
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
 PROG="qos"
 PROFILE_FILE="/etc/qos/profile"
+QOS_DIR="/etc/qos"
+VERSION_FILE="$QOS_DIR/version"
+BUILD_VERSION_FILE="$QOS_DIR/build-version"
 
 # Discover where the qos-* siblings live. On an installed system they are in
 # /usr/bin or /usr/local/bin. In the repo they are in components/qos/rootfs/usr/bin
@@ -44,6 +49,7 @@ Commands:
   e2e [...]            Run full end-to-end suite       (qos-e2e-full)
   ota [...]            A/B OTA orchestration           (qos-ota)
 
+  info                 Show system information
   build [args...]      Build the distribution (host-side, repo-only)
   manifest <sub>       Work with QOS_MANIFEST yaml (gen, diff, validate)
   profile <sub>        Show or set the active workload profile
@@ -61,6 +67,36 @@ Examples:
 This umbrella is an adapter over the per-feature qos-* tools; running
 those tools directly works exactly the same way.
 EOF
+}
+
+read_build_version() {
+    if [ -r "$VERSION_FILE" ]; then
+        cat "$VERSION_FILE"
+        return 0
+    fi
+    if [ -r "$BUILD_VERSION_FILE" ]; then
+        cat "$BUILD_VERSION_FILE"
+        return 0
+    fi
+    printf '%s\n' 'QOS build: unknown'
+}
+
+get_ipv4_addr() {
+    if command -v ip >/dev/null 2>&1; then
+        ip -o -4 addr show scope global
+    elif [ -x /bin/busybox ]; then
+        /bin/busybox ip -o -4 addr show scope global
+    else
+        return 0
+    fi | awk '
+    {
+        for (i = 1; i <= NF; i++) {
+            if ($i == "inet") {
+                print $(i + 1)
+                exit
+            }
+        }
+    }'
 }
 
 run_tool() {
@@ -107,6 +143,51 @@ cmd_profile() {
     esac
 }
 
+cmd_info() {
+    boot_source_file="$QOS_DIR/boot-source"
+
+    qos_version="$(read_build_version)"
+
+    kernel_version="$(uname -r || printf 'unknown')"
+    mem_kib="$(awk '/^MemTotal:/ { print $2; exit }' /proc/meminfo || printf '0')"
+    case "$mem_kib" in
+        ''|*[!0-9]*) mem_kib=0 ;;
+    esac
+    ram_mib=$(( (mem_kib + 1023) / 1024 ))
+
+    uptime_minutes="$(awk '{
+        s = int($1)
+        d = int(s / 86400)
+        h = int((s % 86400) / 3600)
+        m = int((s % 3600) / 60)
+        if (d > 0) {
+            printf "%dd %dh %dm", d, h, m
+        } else if (h > 0) {
+            printf "%dh %dm", h, m
+        } else {
+            printf "%dm", m
+        }
+    }' /proc/uptime || printf 'unknown')"
+
+    ipv4_addr="$(get_ipv4_addr || true)"
+    [ -n "$ipv4_addr" ] || ipv4_addr="none"
+
+    disk_line="$(df -h / | awk 'NR==2 { printf "%s total, %s used, %s free (%s used)", $2, $3, $4, $5 }')"
+    [ -n "$disk_line" ] || disk_line="unknown"
+
+    boot_source="$(cat "$boot_source_file" || true)"
+
+    printf '%s\n' "$qos_version"
+    if [ "$boot_source" = "live-cdrom" ]; then
+        printf '%s\n' "Boot: live CD-ROM"
+    fi
+    printf '%s\n' "Kernel: $kernel_version"
+    printf '%s\n' "Uptime: $uptime_minutes"
+    printf '%s\n' "IPv4: $ipv4_addr"
+    printf '%s\n' "RAM: ${ram_mib} MiB"
+    printf '%s\n' "Disk: $disk_line"
+}
+
 cmd_verify() {
     # Placeholder for the dm-verity verify path (step 9 in the review).
     # Today there is nothing to verify; print the current image identity so
@@ -115,19 +196,13 @@ cmd_verify() {
         . /etc/os-release 2>/dev/null || true
         printf 'image: %s %s\n' "${PRETTY_NAME:-qos}" "${VERSION_ID:-unknown}"
     fi
-    if [ -r /etc/qos/build-version ]; then
-        printf 'build: %s\n' "$(cat /etc/qos/build-version)"
-    fi
+    printf 'build: %s\n' "$(read_build_version)"
     printf 'verity: not-configured (planned)\n'
     printf 'signing: not-configured (planned)\n'
 }
 
 cmd_version() {
-    if [ -r /etc/qos/build-version ]; then
-        cat /etc/qos/build-version
-    else
-        printf '%s (no build-version file)\n' "$PROG"
-    fi
+    read_build_version
 }
 
 cmd_build() {
@@ -172,6 +247,7 @@ main() {
         build)        cmd_build "$@" ;;
         manifest)     cmd_manifest "$@" ;;
         profile)      cmd_profile "$@" ;;
+        info)         cmd_info "$@" ;;
         verify)       cmd_verify "$@" ;;
         *)
             printf 'error: unknown command: %s\n\n' "$cmd" >&2
