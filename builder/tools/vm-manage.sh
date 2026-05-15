@@ -367,6 +367,8 @@ cmd_bootiso() {
     log "  Local:  $iso_file ($iso_size)"
     log "  Remote: $remote_iso"
 
+    # Use ssh + cat pipe instead of scp — Dropbear doesn't ship an SFTP server,
+    # so scp fails with "sftp-server: not found".
     sshpass -p emo2500 ssh \
         -o StrictHostKeyChecking=no \
         -o UserKnownHostsFile=/dev/null \

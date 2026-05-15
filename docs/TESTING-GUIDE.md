@@ -213,10 +213,10 @@ VBoxManage list vms | grep qos
 
 ```bash
 # Watch serial log
-tail -f build/screens/qos-server-serial.log
+tail -f virtualbox/qos-server/serial.log
 
 # Check for errors
-tail -50 build/screens/qos-server-serial.log | grep -i error
+tail -50 virtualbox/qos-server/serial.log | grep -i error
 ```
 
 ### SSH Testing
@@ -228,8 +228,11 @@ timeout 5 sshpass -p emo2500 ssh -o ConnectTimeout=3 -p 2222 emo@localhost whoam
 # SSH with verbose
 sshpass -p emo2500 ssh -vvv -o StrictHostKeyChecking=no -p 2222 emo@localhost "echo test"
 
-# Copy file to VM
-sshpass -p emo2500 scp -P 2222 /tmp/test.iso emo@localhost:/tmp/
+# Copy file to VM (ssh cat pipe — Dropbear has no SFTP server for scp)
+sshpass -p emo2500 ssh -p 2222 emo@localhost "cat > /tmp/test.iso" < /tmp/test.iso
+
+# Show qos system info
+sshpass -p emo2500 ssh -p 2222 emo@localhost "qos info"
 ```
 
 ### Verify bootiso

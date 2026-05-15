@@ -348,7 +348,7 @@ tail -f virtualbox/qos-server/serial.log
 
 # Terminal 2: Boot and monitor desktop
 make vm-boot PROFILE=desktop
-tail -f build/screens/qos-desktop-serial.log
+tail -f virtualbox/qos-desktop/serial.log
 
 # Terminal 3: SSH into either
 make vm-ssh PROFILE=server    # or desktop
