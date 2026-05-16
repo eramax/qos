@@ -1,31 +1,57 @@
 #!/bin/sh
 # qos-cluster - Cluster management CLI
-# Usage: qos-cluster nodes
-#        qos-cluster resources
-#        qos-cluster status
+# Usage: qos-cluster enable    - Enable k3s cluster
+#        qos-cluster disable   - Disable k3s cluster
+#        qos-cluster nodes     - List cluster members
+#        qos-cluster resources - Show cluster resources
+#        qos-cluster status    - Show node status
 
 set -e
 
 CLUSTER_DATA="/var/lib/cluster"
 MEMBERS_FILE="$CLUSTER_DATA/members.json"
 STATUS_FILE="$CLUSTER_DATA/status.json"
+K3S_ENABLED="/etc/qos/k3s-enabled"
 
 usage() {
     cat <<EOF
 Usage: qos-cluster <command>
 
 Commands:
+  enable          Enable the k3s cluster on this node
+  disable         Disable the k3s cluster on this node
   nodes           List cluster members
   resources       Show cluster resource summary
   status          Show this node's status
-  services        List available services in cluster
+  services        List available cluster services
   help            Show this help message
 
 Examples:
+  qos-cluster enable
   qos-cluster nodes
   qos-cluster resources
-  qos-cluster status
 EOF
+}
+
+cmd_enable() {
+    if [ -f "$K3S_ENABLED" ]; then
+        echo "k3s cluster is already enabled"
+        return 0
+    fi
+    mkdir -p "$(dirname "$K3S_ENABLED")"
+    touch "$K3S_ENABLED"
+    echo "k3s cluster enabled"
+    echo "Start with: s6-svc -u /run/service/k3s-server"
+}
+
+cmd_disable() {
+    if [ ! -f "$K3S_ENABLED" ]; then
+        echo "k3s cluster is already disabled"
+        return 0
+    fi
+    rm -f "$K3S_ENABLED"
+    echo "k3s cluster disabled"
+    echo "Stop with:  s6-svc -d /run/service/k3s-server"
 }
 
 cmd_nodes() {
@@ -111,6 +137,12 @@ cmd_services() {
 
 # Main command dispatcher
 case "${1:-help}" in
+    enable)
+        cmd_enable
+        ;;
+    disable)
+        cmd_disable
+        ;;
     nodes)
         cmd_nodes
         ;;

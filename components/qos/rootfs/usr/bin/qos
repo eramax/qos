@@ -44,6 +44,7 @@ Commands:
   install [...]        Install QOS to a disk           (qos-install)
   capability [...]     Manage service capabilities     (qos-capability)
   cluster [...]        Cluster management              (qos-cluster)
+                       enable | disable | nodes | resources | status | services
   expand [...]         Expand state partition          (qos-expand)
   test [...]           Run on-target test suite        (qos-test)
   e2e [...]            Run full end-to-end suite       (qos-e2e-full)
