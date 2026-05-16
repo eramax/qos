@@ -30,13 +30,6 @@ if ! command -v k3s >/dev/null 2>&1; then
     exec sleep 2147483647
 fi
 
-# CNI plugins live under /usr/libexec/cni on Alpine; k3s/containerd
-# searches /opt/cni/bin.
-if [ ! -d /opt/cni/bin ]; then
-    mkdir -p /opt/cni
-    ln -sf /usr/libexec/cni /opt/cni/bin
-fi
-
 # Alpine iptables uses nftables backend by default, but kube-proxy
 # and flannel need the legacy iptables binary.
 if command -v iptables-legacy >/dev/null 2>&1; then
@@ -45,6 +38,13 @@ if command -v iptables-legacy >/dev/null 2>&1; then
         ln -sf "/usr/sbin/${_cmd}-legacy" "/usr/sbin/${_cmd}" 2>/dev/null || true
     done
 fi
+
+# CNI plugins under /usr/libexec/cni on Alpine.  k3s may look under
+# /opt/cni/bin or under $data_dir/data/cni; populate both.
+mkdir -p /opt/cni
+ln -sf /usr/libexec/cni /opt/cni/bin 2>/dev/null || true
+mkdir -p "$state_dir/data/cni"
+cp -a /usr/libexec/cni/* "$state_dir/data/cni/" 2>/dev/null || true
 
 exec k3s server \
     --data-dir "$state_dir" \
