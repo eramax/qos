@@ -33,6 +33,8 @@ riverctl map normal Super S spawn foot
 riverctl map normal Super C spawn chromium
 riverctl map normal Super O spawn /usr/bin/atl-launch /usr/share/atl/apks/gles3jni.apk -l com/android/gles3jni/GLES3JNIActivity
 riverctl map normal Super P spawn /usr/bin/atl-launch /usr/share/atl/apks/gd.apk -l org/happysanta/gd/GDActivity
+riverctl map normal Super U spawn /usr/bin/atl-launch /usr/share/atl/apks/2048.apk -l com.uberspot.a2048.MainActivity
+riverctl map normal Super R spawn /usr/bin/atl-launch /usr/share/atl/apks/retrobreaker.apk -l br.usp.ime.retrobreaker.MainActivity
 
 riverctl map normal Super J focus-view next
 riverctl map normal Super K focus-view previous
