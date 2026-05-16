@@ -35,9 +35,10 @@ EOF
 
 cmd_enable() {
     SVC_SRC="/usr/share/qos/s6/k3s-server"
-    SVC_DST="/etc/s6/service-tree/k3s-server"
+    SVC_BOOT="/etc/s6/service-tree/k3s-server"
+    SVC_RUN="/run/service/k3s-server"
 
-    if [ -d "$SVC_DST" ]; then
+    if [ -d "$SVC_RUN" ]; then
         echo "k3s cluster is already enabled"
         return 0
     fi
@@ -47,20 +48,26 @@ cmd_enable() {
         return 1
     fi
 
-    mkdir -p "$(dirname "$SVC_DST")"
-    cp -a "$SVC_SRC" "$SVC_DST"
-    echo "k3s cluster enabled (runs at boot via s6)"
+    # Install for next boot
+    mkdir -p "$(dirname "$SVC_BOOT")"
+    cp -a "$SVC_SRC" "$SVC_BOOT"
+
+    # Start immediately
+    mkdir -p "$(dirname "$SVC_RUN")"
+    cp -a "$SVC_SRC" "$SVC_RUN"
+    echo "k3s cluster enabled (running now, auto-starts at boot)"
 }
 
 cmd_disable() {
-    SVC_DST="/etc/s6/service-tree/k3s-server"
+    SVC_BOOT="/etc/s6/service-tree/k3s-server"
+    SVC_RUN="/run/service/k3s-server"
 
-    if [ ! -d "$SVC_DST" ]; then
+    if [ ! -d "$SVC_BOOT" ] && [ ! -d "$SVC_RUN" ]; then
         echo "k3s cluster is already disabled"
         return 0
     fi
 
-    rm -rf "$SVC_DST"
+    rm -rf "$SVC_BOOT" "$SVC_RUN" 2>/dev/null || true
     echo "k3s cluster disabled"
 }
 
