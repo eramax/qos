@@ -189,7 +189,7 @@ vps-run-iso:
 	bash builder/tools/vps-bootiso.sh
 
 vps-bootiso:
-	@test -n "$(HOST)" || { echo "Usage: make vps-bootiso HOST=<ip> [PORT=22] [USER=emo] [PASS=emo2500] [ISO=dist/qos-server.iso]"; echo "Example: make vps-bootiso HOST=162.141.92.102"; exit 1; }
+	@test -n "$(HOST)" || { echo "Usage: make vps-bootiso HOST=<ip> [PORT=22] [USER=emo] [PASS=emo2500] [ISO=dist/qos-server.iso]"; echo "Example: make vps-bootiso HOST=x.x.x.x"; exit 1; }
 	@VPS_BOOTISO_MODE=all \
 	VPS_HOST="$(HOST)" \
 	VPS_PORT="$${PORT:-22}" \

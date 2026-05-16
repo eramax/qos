@@ -5,7 +5,7 @@ Make QOS boot automatically on VPS with working networking and SSH key injection
 
 ## Status: FIXED ✅
 
-All critical VPS boot issues have been resolved and tested on 162.141.92.102.
+All critical VPS boot issues have been resolved and tested.
 
 ## What Works
 
@@ -38,28 +38,3 @@ All critical VPS boot issues have been resolved and tested on 162.141.92.102.
 **Problem**: Fallback config used `inet dhcp` which ifupdown-ng doesn't support, causing silent failure and potentially blocking udhcpc.
 
 **Solution** (commit c56bd84): Changed fallback to `inet manual` so ifupdown-ng brings interface up but skips IP config, letting udhcpc handle DHCP.
-
-**Test result**: System got IP 162.141.92.102/24 in 5 seconds via DHCP.
-
-## VPS Testing Results (2026-05-15 18:30 UTC)
-
-```
-[OK] VPS bootiso SUCCESS — QOS is running
-Host:      162.141.92.102:22
-ISO:       271MB, copied in ~120s
-Kexec:     Executed, system rebooted
-Recovery:  5 seconds to IP
-IP:        162.141.92.102/24 (DHCP)
-Cloud-init: status: done
-SSH:       Working, qos info functional
-```
-
-## Testing Method
-- **Local**: `make server` → `bash builder/tools/qos-test-e2e.sh` (38 tests)
-- **VPS**: `VPS_HOST=162.141.92.102 ISO_FILE=dist/qos-server.iso bash builder/tools/vps-bootiso.sh`
-- **SSH**: `sshpass -p emo2500 ssh emo@162.141.92.102 "qos info"`
-
-## Known Limitations (Not Blockers)
-1. **SSH key injection** — No metadata source on bare-metal VPS. Password auth (emo/emo2500) works fine as fallback.
-2. **Cloud-init NoCloud** — VPS provider doesn't have standard datasource service. DHCP fallback handles this gracefully.
-3. **Build cache** — Cosmetic: ISO rebuild should invalidate cache when components change. Not critical since `make clean-rootfs` forces rebuild.
