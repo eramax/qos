@@ -55,20 +55,56 @@ cmd_enable() {
     # Start immediately
     mkdir -p "$(dirname "$SVC_RUN")"
     cp -a "$SVC_SRC" "$SVC_RUN"
+    chmod 0755 "$SVC_RUN"
+
+    # Notify s6-svscan to supervise the new service
+    if command -v s6-svscanctl >/dev/null 2>&1; then
+        s6-svscanctl -a /run/service || true
+    fi
+
     echo "k3s cluster enabled (running now, auto-starts at boot)"
 }
 
 cmd_disable() {
     SVC_BOOT="/etc/s6/service-tree/k3s-server"
     SVC_RUN="/run/service/k3s-server"
+    K3S_DATA="/var/lib/rancher"
 
     if [ ! -d "$SVC_BOOT" ] && [ ! -d "$SVC_RUN" ]; then
         echo "k3s cluster is already disabled"
         return 0
     fi
 
+    echo "Stopping k3s cluster..."
+
+    # Gracefully stop the service if it's running
+    if [ -d "$SVC_RUN" ] && command -v s6-svc >/dev/null 2>&1; then
+        s6-svc -d "$SVC_RUN" 2>/dev/null || true
+    fi
+
+    # Remove service definitions
     rm -rf "$SVC_BOOT" "$SVC_RUN" 2>/dev/null || true
-    echo "k3s cluster disabled"
+
+    # Kill orphaned s6-supervise k3s-server process
+    if command -v pkill >/dev/null 2>&1; then
+        pkill -f "s6-supervise k3s-server" 2>/dev/null || true
+    fi
+
+    # Give k3s time to shut down gracefully
+    sleep 2
+
+    # Force kill any remaining k3s/containerd processes
+    # Use ps + grep + kill for busybox compatibility (no killall on minimal systems)
+    ps aux | grep -E "k3s|containerd" | grep -v grep | awk '{print $1}' | while read pid; do
+        [ -n "$pid" ] && kill -9 "$pid" 2>/dev/null || true
+    done
+
+    # Clean up k3s data to free disk space
+    if [ -d "$K3S_DATA" ]; then
+        rm -rf "$K3S_DATA" 2>/dev/null || true
+    fi
+
+    echo "k3s cluster disabled (data cleaned)"
 }
 
 cmd_nodes() {

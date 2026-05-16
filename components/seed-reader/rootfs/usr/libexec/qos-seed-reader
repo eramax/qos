@@ -60,6 +60,12 @@ write_hostname() {
     if [ "$ROOT_DIR" = "/" ] && [ -w /proc/sys/kernel/hostname ]; then
         printf '%s\n' "$_hostname" > /proc/sys/kernel/hostname || true
     fi
+
+    # Add hostname to /etc/hosts for local resolution (fixes k3s API endpoint detection)
+    _hosts_file="$(root_path /etc/hosts)"
+    if ! grep -q "^127\.0\.0\.1[[:space:]]*$_hostname" "$_hosts_file" 2>/dev/null; then
+        printf '127.0.0.1\t%s\n' "$_hostname" >> "$_hosts_file"
+    fi
 }
 
 write_resolv_conf() {

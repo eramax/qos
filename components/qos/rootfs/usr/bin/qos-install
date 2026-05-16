@@ -288,17 +288,35 @@ mount "$STATE_PART" "$MNTBASE/state"
 
 # ── Step 4: Copy rootfs ───────────────────────────────────────────────────────
 #
-# Preferred: mount the source qos-root-a partition directly (cleanest copy,
-# avoids copying overlay artifacts from the running system).
-# Fallback: tar the running / (with exclusions).
+# Priority:
+#  1. ISO rootfs.sfs (cleanest, no runtime/ephemeral data)
+#  2. Source qos-root-a partition (if upgrading from installed disk)
+#  3. Running system (fallback, may include ephemeral k3s/kubelet data)
 #
 log "Copying rootfs..."
 _src_root_dev="$(findfs LABEL=qos-root-a 2>/dev/null || true)"
+_rootfs_sfs=""
 
-if [ -n "$_src_root_dev" ] && [ "$_src_root_dev" != "$ROOT_PART" ]; then
+if [ -f /cdrom/rootfs.sfs ] 2>/dev/null; then
+    _rootfs_sfs="/cdrom/rootfs.sfs"
+elif [ -f /var/lib/qos/rootfs.sfs ] 2>/dev/null; then
+    _rootfs_sfs="/var/lib/qos/rootfs.sfs"
+fi
+
+if [ -n "$_rootfs_sfs" ]; then
+    mkdir -p "$MNTBASE/src-root"
+    mount -t squashfs -o ro "$_rootfs_sfs" "$MNTBASE/src-root"
+    log "  Source: $_rootfs_sfs (clean squashfs)"
+    tar -C "$MNTBASE/src-root" \
+        --exclude=./proc --exclude=./sys --exclude=./dev \
+        --exclude=./run  --exclude=./tmp \
+        -cf - . | tar -C "$MNTBASE/root" -xf -
+    umount "$MNTBASE/src-root"
+    rmdir  "$MNTBASE/src-root"
+elif [ -n "$_src_root_dev" ] && [ "$_src_root_dev" != "$ROOT_PART" ]; then
     mkdir -p "$MNTBASE/src-root"
     mount -o ro "$_src_root_dev" "$MNTBASE/src-root"
-    log "  Source: $MNTBASE/src-root (mounted $ 		_src_root_dev)"
+    log "  Source: $_src_root_dev (mounted partition)"
     tar -C "$MNTBASE/src-root" \
         --exclude=./proc --exclude=./sys --exclude=./dev \
         --exclude=./run  --exclude=./tmp \
@@ -306,7 +324,7 @@ if [ -n "$_src_root_dev" ] && [ "$_src_root_dev" != "$ROOT_PART" ]; then
     umount "$MNTBASE/src-root"
     rmdir  "$MNTBASE/src-root"
 else
-    log "  Source: running system (live copy)"
+    log "  Source: running system (live copy, may include ephemeral data)"
     tar -C / \
         --exclude=./proc --exclude=./sys  --exclude=./dev  \
         --exclude=./run  --exclude=./tmp  --exclude=./cdrom \
@@ -439,7 +457,7 @@ log "  $ROOT_PART  Root  ${ROOT_SIZE_MB} MB  [label: qos-root-a]"
 log "  $STATE_PART State ${VAR_SIZE_MB} MB  [label: qos-state]"
 log ""
 log "Next steps:"
-log "  1. poweroff"
+log "  1. reboot"
 log "  2. make qemu       (boot from installed disk)"
 log ""
 log "Log: $INSTALL_LOG"

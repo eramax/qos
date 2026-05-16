@@ -32,12 +32,19 @@ if ! command -v k3s >/dev/null 2>&1; then
     exec sleep 2147483647
 fi
 
-# Alpine iptables uses nftables backend by default, but kube-proxy
-# and flannel need the legacy iptables binary.
+# Alpine iptables uses nftables backend by default.  k3s v1.31+ uses
+# nftables kube-proxy mode by default, but the kernel's iptables-nft
+# compatibility layer produces incomplete DNAT rules (missing
+# --to-destination) on this kernel.  Force iptables-legacy below so
+# kube-proxy uses the legacy xtables API directly.
 if command -v iptables-legacy >/dev/null 2>&1; then
-    for _cmd in iptables iptables-restore iptables-save ip6tables ip6tables-restore ip6tables-save; do
+    for _cmd in iptables ip6tables; do
         [ -x "/usr/sbin/${_cmd}-legacy" ] || continue
         ln -sf "/usr/sbin/${_cmd}-legacy" "/usr/sbin/${_cmd}" 2>/dev/null || true
+        for _sub in restore save; do
+            [ -x "/usr/sbin/${_cmd}-legacy-${_sub}" ] || continue
+            ln -sf "/usr/sbin/${_cmd}-legacy-${_sub}" "/usr/sbin/${_cmd}-${_sub}" 2>/dev/null || true
+        done
     done
 fi
 
@@ -48,9 +55,35 @@ ln -sf /usr/libexec/cni /opt/cni/bin 2>/dev/null || true
 mkdir -p "$state_dir/data/cni"
 cp -a /usr/libexec/cni/* "$state_dir/data/cni/" 2>/dev/null || true
 
+# Start k3s server — do NOT set advertise-address to 127.0.0.1.
+# Doing so causes the kubernetes service endpoint to be unreachable
+# from pods, which prevents kube-proxy from creating the DNAT rule for
+# the kubernetes ClusterIP (10.43.0.1:443).  Without that DNAT, every
+# pod that needs the API (coredns, metrics-server, local-path-provisioner,
+# helm installs) fails.
+#
+# k3s auto-detects the node IP from the default route, which makes
+# the endpoint reachable from the pod CIDR via flannel+cni0.
 exec k3s server \
     --data-dir "$state_dir" \
+    --kube-proxy-arg "proxy-mode=iptables" \
     --write-kubeconfig-mode=0644 \
     --snapshotter native \
     --disable servicelb \
-    ${K3S_EXTRA_ARGS:-}
+    ${K3S_EXTRA_ARGS:-} &
+
+_k3s_pid=$!
+
+# Wait for kubeconfig, then patch for external access with actual node IP
+for _i in $(seq 1 60); do
+    [ -f /etc/rancher/k3s/k3s.yaml ] && break
+    sleep 1
+done
+
+if [ -f /etc/rancher/k3s/k3s.yaml ]; then
+    # Get the node's primary IP (src field from ip route get 1)
+    _node_ip="$(ip route get 1 | grep -o 'src [^ ]*' | awk '{print $2}')"
+    [ -n "$_node_ip" ] && sed -i "s|127\.0\.0\.1:6443|${_node_ip}:6443|g" /etc/rancher/k3s/k3s.yaml 2>/dev/null || true
+fi
+
+wait $_k3s_pid

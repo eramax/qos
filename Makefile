@@ -143,7 +143,7 @@ clean-disk:
 
 live:
 	@## Boot live ISO — extra disk (/dev/vda inside VM) is the install target.
-	@## Workflow: make live → qos-install --auto /dev/vda → poweroff → make qemu
+	@## Workflow: make live → qos-install --auto /dev/vda → reboot → make qemu
 	@test -f dist/qos-$(QOS_PROFILE).iso || { echo "ERROR: dist/qos-$(QOS_PROFILE).iso not found. Run: make full QOS_PROFILE=$(QOS_PROFILE)"; exit 1; }
 	@QEMU_DISPLAY=$(QEMU_DISPLAY) QEMU_MEMORY=$(QEMU_MEMORY) QEMU_CPUS=$(QEMU_CPUS) QEMU_NET_MODE=$(QEMU_NET_MODE) QEMU_BRIDGE_IFACE=$(QEMU_BRIDGE_IFACE) QEMU_HOSTFWD_PORT=$(QEMU_HOSTFWD_PORT) builder/tools/boot-image.sh --qemu-iso $(ROOT)/dist/qos-$(QOS_PROFILE).iso
 
