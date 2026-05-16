@@ -20,6 +20,7 @@ components:
   - eudev
   - pipewire
   - gpu-open-source
+  - atl
   - chromium
   - desktop-user
   - virtualbox-guest

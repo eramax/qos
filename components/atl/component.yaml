@@ -1,0 +1,21 @@
+name: atl
+packages:
+  # System libs ATL/runtime links against (not vendored in rootfs)
+  - webkit2gtk-6.0          # WebView support in ATL
+  - libportal               # XDG desktop portal file picker/open-uri
+  - fontconfig              # Font rendering
+  - vulkan-loader           # GPU acceleration via libandroid EGL
+  - alsa-lib                # Audio backend (libasound)
+  - libbsd                  # ART libbase runtime dep (libbsd.so.0)
+  - lz4-libs                # ART libart runtime dep (liblz4.so.1)
+  - libunwind               # ART libbacktrace runtime dep
+  - sqlite-libs             # ATL SQLite integration
+  - ffmpeg-libavcodec       # ATL media codec (android.media.MediaCodec)
+  - libdrm                  # ATL DRM support
+  - ffmpeg-libswscale       # ATL media scaling
+  - libgudev                # ATL device discovery
+depends_on:
+  - gpu-open-source
+  - pipewire
+  - dbus
+  - seatd

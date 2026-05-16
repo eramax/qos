@@ -1,0 +1,44 @@
+#!/bin/sh
+set -eu
+
+usage() {
+  cat <<EOF
+Usage: atl <apk-file> [-l <activity>] [options]
+
+Run Android APK applications natively on QOS.
+
+Options:
+  -l <activity>   Launch specific activity (e.g., com.example/.MainActivity)
+  -w <width>      Window width in pixels (default: 720)
+  -h <height>     Window height in pixels (default: 1280)
+  --install       Install APK and create .desktop entry
+  --help          Show this help
+
+Environment variables:
+  ATL_DIRECT_EGL=1          Use direct EGL surfaces (better performance)
+  ATL_FORCE_FULLSCREEN=1    Launch in fullscreen
+  ATL_UGLY_ENABLE_WEBVIEW=1 Enable WebView support
+
+Examples:
+  atl app.apk -l com.example/.MainActivity
+  atl app.apk --install
+  ATL_DIRECT_EGL=1 atl game.apk -l com.game/.GameActivity -w 1920 -h 1080
+EOF
+}
+
+if [ $# -eq 0 ]; then
+  usage
+  exit 1
+fi
+
+for arg in "$@"; do
+  if [ "$arg" = "--help" ]; then
+    usage
+    exit 0
+  fi
+done
+
+WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-1}"
+export WAYLAND_DISPLAY
+
+exec /usr/bin/android-translation-layer "$@"

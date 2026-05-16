@@ -1,0 +1,5 @@
+#!/bin/sh
+# ATL launcher wrapper — sets up bionic linker path and launches an APK
+BIONIC_LD_LIBRARY_PATH=/usr/lib/java/dex/art/natives/:/usr/lib/art/
+export BIONIC_LD_LIBRARY_PATH
+exec /usr/bin/android-translation-layer "$@"

@@ -1,4 +1,6 @@
-# Alpine package repositories for the target image.
-# These are the current stable repositories; later we can pin snapshots for stricter reproducibility.
-https://dl-cdn.alpinelinux.org/alpine/v3.23/main
-https://dl-cdn.alpinelinux.org/alpine/v3.23/community
+# Alpine package repositories for the target QOS image.
+# Edge provides gtk4, webkit2gtk-6.0, and other deps ATL needs at runtime.
+# art_standalone, bionic_translation, and android-translation-layer libs
+# come from source-built artifacts in components/atl/rootfs/.
+https://dl-cdn.alpinelinux.org/alpine/edge/main
+https://dl-cdn.alpinelinux.org/alpine/edge/community

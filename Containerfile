@@ -6,7 +6,7 @@
 #   podman inspect --format '{{.Digest}}' alpine:3.23
 # Then replace alpine:3.23 below with alpine@sha256:...
 
-FROM docker.io/library/alpine:3.23
+FROM docker.io/library/alpine:edge
 
 ENV LANG=C.UTF-8 \
     LC_ALL=C.UTF-8
