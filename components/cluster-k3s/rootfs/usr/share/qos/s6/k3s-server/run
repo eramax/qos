@@ -48,9 +48,29 @@ ln -sf /usr/libexec/cni /opt/cni/bin 2>/dev/null || true
 mkdir -p "$state_dir/data/cni"
 cp -a /usr/libexec/cni/* "$state_dir/data/cni/" 2>/dev/null || true
 
+# Start k3s with advertise-address 127.0.0.1 for pod-to-pod communication.
+# Internal pods reach API via localhost; external access patched below to use node IP.
 exec k3s server \
     --data-dir "$state_dir" \
+    --advertise-address 127.0.0.1 \
     --write-kubeconfig-mode=0644 \
     --snapshotter native \
     --disable servicelb \
-    ${K3S_EXTRA_ARGS:-}
+    ${K3S_EXTRA_ARGS:-} &
+
+_k3s_pid=$!
+
+# Wait for kubeconfig, then patch for external access with actual node IP
+for _i in $(seq 1 60); do
+    [ -f /etc/rancher/k3s/k3s.yaml ] && break
+    sleep 1
+done
+
+if [ -f /etc/rancher/k3s/k3s.yaml ]; then
+    # Get the node's primary IP (src field from ip route get 1)
+    _node_ip="$(ip route get 1 | grep -o 'src [^ ]*' | awk '{print $2}')"
+    [ -n "$_node_ip" ] && [ "$_node_ip" != "127.0.0.1" ] && \
+        sed -i 's|127\.0\.0\.1:6443|'${_node_ip}':6443|g' /etc/rancher/k3s/k3s.yaml 2>/dev/null || true
+fi
+
+wait $_k3s_pid
