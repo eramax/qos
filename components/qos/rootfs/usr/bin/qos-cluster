@@ -34,24 +34,34 @@ EOF
 }
 
 cmd_enable() {
-    if [ -f "$K3S_ENABLED" ]; then
+    SVC_SRC="/usr/share/qos/s6/k3s-server"
+    SVC_DST="/etc/s6/service-tree/k3s-server"
+
+    if [ -d "$SVC_DST" ]; then
         echo "k3s cluster is already enabled"
         return 0
     fi
-    mkdir -p "$(dirname "$K3S_ENABLED")"
-    touch "$K3S_ENABLED"
-    echo "k3s cluster enabled"
-    echo "Start with: s6-svc -u /run/service/k3s-server"
+
+    if [ ! -f "$SVC_SRC/run" ]; then
+        echo "qos-cluster: k3s service definition not found at $SVC_SRC" >&2
+        return 1
+    fi
+
+    mkdir -p "$(dirname "$SVC_DST")"
+    cp -a "$SVC_SRC" "$SVC_DST"
+    echo "k3s cluster enabled (runs at boot via s6)"
 }
 
 cmd_disable() {
-    if [ ! -f "$K3S_ENABLED" ]; then
+    SVC_DST="/etc/s6/service-tree/k3s-server"
+
+    if [ ! -d "$SVC_DST" ]; then
         echo "k3s cluster is already disabled"
         return 0
     fi
-    rm -f "$K3S_ENABLED"
+
+    rm -rf "$SVC_DST"
     echo "k3s cluster disabled"
-    echo "Stop with:  s6-svc -d /run/service/k3s-server"
 }
 
 cmd_nodes() {
