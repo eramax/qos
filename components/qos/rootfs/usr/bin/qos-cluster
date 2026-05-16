@@ -55,6 +55,13 @@ cmd_enable() {
     # Start immediately
     mkdir -p "$(dirname "$SVC_RUN")"
     cp -a "$SVC_SRC" "$SVC_RUN"
+    chmod 0755 "$SVC_RUN"
+
+    # Notify s6-svscan to supervise the new service
+    if command -v s6-svscanctl >/dev/null 2>&1; then
+        s6-svscanctl -a /run/service || true
+    fi
+
     echo "k3s cluster enabled (running now, auto-starts at boot)"
 }
 
@@ -65,6 +72,11 @@ cmd_disable() {
     if [ ! -d "$SVC_BOOT" ] && [ ! -d "$SVC_RUN" ]; then
         echo "k3s cluster is already disabled"
         return 0
+    fi
+
+    # Gracefully stop the service if it's running
+    if [ -d "$SVC_RUN" ] && command -v s6-svc >/dev/null 2>&1; then
+        s6-svc -d "$SVC_RUN" 2>/dev/null || true
     fi
 
     rm -rf "$SVC_BOOT" "$SVC_RUN" 2>/dev/null || true
