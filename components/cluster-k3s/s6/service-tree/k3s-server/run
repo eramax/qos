@@ -6,30 +6,49 @@
 # rebooting). See `qos cluster enable` (when wired).
 
 set -eu
-PATH=/usr/sbin:/usr/bin:/sbin:/bin
+PATH=/usr/sbin:/usr/bin:/sbin:/bin:/opt/cni/bin
 
 enabled_marker="/etc/qos/k3s-enabled"
 state_dir="/var/lib/rancher/k3s"
 
 if [ ! -f "$enabled_marker" ]; then
-    # Not enabled — park the service so s6 doesn't respawn-loop.
     exec sleep 2147483647
 fi
 
 mkdir -p "$state_dir"
 
+# Download official k3s if not present (Alpine package strips addons).
+if [ -x /usr/libexec/qos-install-k3s ]; then
+    /usr/libexec/qos-install-k3s || {
+        echo "k3s-server: failed to install k3s" >&2
+        exec sleep 2147483647
+    }
+fi
+
 if ! command -v k3s >/dev/null 2>&1; then
-    echo "k3s-server: k3s binary not installed" >&2
+    echo "k3s-server: k3s binary not found" >&2
     exec sleep 2147483647
 fi
 
-# --write-kubeconfig-mode=0644 so non-root operators can use `k9s`
-# without sudo. Tighten if this becomes multi-tenant.
-# Link CNI plugins if they are not in PATH
-ln -sf /usr/libexec/cni/* /usr/bin/ || true
+# CNI plugins live under /usr/libexec/cni on Alpine; k3s/containerd
+# searches /opt/cni/bin.
+if [ ! -d /opt/cni/bin ]; then
+    mkdir -p /opt/cni
+    ln -sf /usr/libexec/cni /opt/cni/bin
+fi
+
+# Alpine iptables uses nftables backend by default, but kube-proxy
+# and flannel need the legacy iptables binary.
+if command -v iptables-legacy >/dev/null 2>&1; then
+    for _cmd in iptables iptables-restore iptables-save ip6tables ip6tables-restore ip6tables-save; do
+        [ -x "/usr/sbin/${_cmd}-legacy" ] || continue
+        ln -sf "/usr/sbin/${_cmd}-legacy" "/usr/sbin/${_cmd}" 2>/dev/null || true
+    done
+fi
 
 exec k3s server \
     --data-dir "$state_dir" \
     --write-kubeconfig-mode=0644 \
     --snapshotter native \
+    --disable servicelb \
     ${K3S_EXTRA_ARGS:-}

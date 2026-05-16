@@ -3,8 +3,9 @@ depends_on:
   - cluster
   - cluster-node
 packages:
-  - k3s
   - k9s
   - cni-plugins
   - conntrack-tools
   - iptables
+  - iptables-legacy
+  - curl

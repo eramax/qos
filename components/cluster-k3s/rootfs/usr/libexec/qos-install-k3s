@@ -1,0 +1,25 @@
+#!/bin/sh
+# qos-install-k3s — download official k3s binary (includes embedded addons
+# that the Alpine k3s package strips out).
+set -eu
+
+K3S_VERSION="${K3S_VERSION:-v1.34.2+k3s1}"
+K3S_BIN="/usr/local/bin/k3s"
+K3S_URL="https://github.com/k3s-io/k3s/releases/download/${K3S_VERSION}/k3s"
+
+if [ -x "$K3S_BIN" ]; then
+    _ver="$("$K3S_BIN" version 2>/dev/null | head -1)"
+    echo "k3s-install: already installed — $_ver"
+    exit 0
+fi
+
+echo "k3s-install: downloading k3s $K3S_VERSION ..."
+curl -sfL "$K3S_URL" -o "$K3S_BIN" || {
+    echo "k3s-install: download failed" >&2
+    exit 1
+}
+chmod 755 "$K3S_BIN"
+ln -sf "$K3S_BIN" /usr/bin/k3s
+ln -sf "$K3S_BIN" /usr/bin/kubectl
+
+echo "k3s-install: $("$K3S_BIN" version 2>/dev/null | head -1)"

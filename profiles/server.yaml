@@ -3,12 +3,12 @@ extends: base
 kernel:
   fragments:
     - components/bootiso/kernel/kexec.conf
-    # - components/cluster-k3s/kernel/k3s.conf
+    - components/cluster-k3s/kernel/k3s.conf
 qemu:
   command: QOS_PROFILE=server QEMU_DISPLAY=none QEMU_MEMORY=1G QEMU_CPUS=2
     QEMU_NET_MODE=tap QEMU_BRIDGE_IFACE=br0 QEMU_HOSTFWD_PORT=2222
     builder/tools/boot-image.sh --qemu-iso dist/qos-server.iso
 components:
-  # - cluster-k3s
+  - cluster-k3s
   - seed-reader
   - bootiso
