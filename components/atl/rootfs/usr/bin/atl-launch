@@ -1,5 +1,11 @@
 #!/bin/sh
-# ATL launcher wrapper — sets up bionic linker path and launches an APK
+# ATL launcher wrapper — sets up bionic linker and launches an APK.
+# Uses X11 backend only when not in a Wayland session (e.g. over SSH).
 BIONIC_LD_LIBRARY_PATH=/usr/lib/java/dex/art/natives/:/usr/lib/art/
+if [ -z "${WAYLAND_DISPLAY:-}" ] || [ ! -e "${XDG_RUNTIME_DIR:-}/${WAYLAND_DISPLAY}" ]; then
+    GDK_BACKEND=x11
+    DISPLAY=:0
+    export GDK_BACKEND DISPLAY
+fi
 export BIONIC_LD_LIBRARY_PATH
 exec /usr/bin/android-translation-layer "$@"

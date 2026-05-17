@@ -3,3 +3,4 @@ build/
 dist/
 virtualbox/qos-*/
 !virtualbox/create-vm.sh
+deps/

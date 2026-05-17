@@ -23,6 +23,7 @@ chmod -R u+w "$rootfs/usr/sbin" 2>/dev/null || true
 chmod -R u+w "$rootfs/usr/lib" 2>/dev/null || true
 chmod -R u+w "$rootfs/usr/share" 2>/dev/null || true
 chmod -R u+w "$rootfs/sbin" 2>/dev/null || true
+chmod u+w "$rootfs/home" 2>/dev/null || true
 
 # Set hostname.
 printf 'qos\n' > "$etc_dir/hostname"
