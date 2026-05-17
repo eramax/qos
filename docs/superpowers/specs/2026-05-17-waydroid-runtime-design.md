@@ -44,8 +44,8 @@ AOSP framework (API 28+) ──▶ .oat (pre-compiled per arch)
 ### Display: Standard Wayland Client
 
 - Our runtime is a standard Wayland client connecting to any wlroots-based compositor (river, sway, etc.).
-- GLES apps render via `wl_egl` (EGL + Wayland surface → hardware-accelerated).
-- Canvas apps render via `wl_shm` (Skia raster → shared memory buffer → compositor).
+- GLES apps: JNI stubs in `runtime/jni/opengl/` translate GLES calls to desktop GL → rendered to EGL context from `runtime/wayland/egl.c` → composited via `wl_egl` → Wayland.
+- Canvas apps: JNI stubs in `runtime/jni/graphics/` call Skia raster backend → `wl_shm` shared buffer → compositor.
 - Each Activity gets its own `xdg_toplevel` window.
 - No XWayland dependency. No GTK4 dependency.
 
@@ -222,8 +222,8 @@ Rootfs layout:
 4. Test with Bomber, Taponium, Replica Island
 5. ~2-3 weeks
 
-### Phase 4: Modern API + Audio
-1. Raise framework to API 28+
+### Phase 4: Complete API 28+ Coverage + Audio
+1. Complete remaining API 28+ framework classes/stubs
 2. Audio stub → PipeWire
 3. Storage mapping
 4. Multi-window (multiple activities)
