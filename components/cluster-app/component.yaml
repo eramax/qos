@@ -1,0 +1,4 @@
+name: cluster-app
+description: K3s cluster dashboard (cluster-info) deployed as a k8s workload
+depends_on:
+  - cluster-k3s

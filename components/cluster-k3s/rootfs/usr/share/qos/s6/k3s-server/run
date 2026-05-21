@@ -69,7 +69,6 @@ exec k3s server \
     --kube-proxy-arg "proxy-mode=iptables" \
     --write-kubeconfig-mode=0644 \
     --snapshotter native \
-    --disable servicelb \
     ${K3S_EXTRA_ARGS:-} &
 
 _k3s_pid=$!
