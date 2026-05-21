@@ -1,0 +1,176 @@
+#!/bin/sh
+# qos-cluster-app — manage QOS cluster applications
+# Usage: qos-cluster-app enable  [app]   — deploy app (default: cluster-info)
+#        qos-cluster-app disable [app]   — remove app
+#        qos-cluster-app list            — list available apps
+#        qos-cluster-app status          — show deployed apps
+set -eu
+
+APP_DIR="/usr/share/qos/cluster-app"
+CONF="/etc/qos/cluster-app.conf"
+K3S_MANIFESTS="/var/lib/rancher/k3s/server/manifests"
+
+usage() {
+    cat <<EOF
+Usage: qos-cluster-app <command> [app]
+
+Commands:
+  enable  [app]   Deploy an app into the cluster (default: cluster-info)
+  disable [app]   Remove an app from the cluster
+  list            List available apps
+  status          Show deployed cluster apps
+
+Apps:
+  cluster-info    K3s cluster dashboard
+
+Configuration: $CONF
+  Edit that file to set CLUSTER_INFO_HOST and CF_DNS_API_TOKEN before enabling.
+EOF
+}
+
+# ── load config ───────────────────────────────────────────────────────
+CLUSTER_INFO_HOST=""
+CF_DNS_API_TOKEN=""
+ACME_EMAIL=""
+if [ -f "$CONF" ]; then
+    . "$CONF"
+fi
+
+# ── helpers ───────────────────────────────────────────────────────────
+
+die() { echo "error: $*" >&2; exit 1; }
+
+require_conf() {
+    local key="$1" val="$2"
+    if [ -z "$val" ]; then
+        die "$key is not set in $CONF — edit that file first"
+    fi
+}
+
+wait_kubectl() {
+    local i=0
+    while [ $i -lt 30 ]; do
+        kubectl get nodes >/dev/null 2>&1 && return 0
+        i=$((i+1)); sleep 2
+    done
+    die "kubectl not ready — is k3s running?"
+}
+
+# derive wildcard domain from host: info.sv3.example.com → *.sv3.example.com
+wildcard_of() {
+    echo "$1" | sed 's/^[^.]*\./\*./'
+}
+
+# ── commands ──────────────────────────────────────────────────────────
+
+cmd_enable() {
+    APP="${1:-cluster-info}"
+    case "$APP" in
+        cluster-info)
+            require_conf CLUSTER_INFO_HOST "$CLUSTER_INFO_HOST"
+            require_conf CF_DNS_API_TOKEN  "$CF_DNS_API_TOKEN"
+
+            ACME_EMAIL="${ACME_EMAIL:-admin@$(echo "$CLUSTER_INFO_HOST" | cut -d. -f2-)}"
+            WILDCARD="$(wildcard_of "$CLUSTER_INFO_HOST")"
+
+            wait_kubectl
+            mkdir -p "$K3S_MANIFESTS"
+
+            # 1. Traefik ACME (DNS-01 + wildcard cert)
+            ACME_SRC="$APP_DIR/traefik-acme.yaml"
+            [ -f "$ACME_SRC" ] || die "$ACME_SRC not found"
+            ACME_TMP="$(mktemp /tmp/traefik-acme-XXXXXX.yaml)"
+            trap 'rm -f "$ACME_TMP" "$CI_TMP"' EXIT
+            sed -e "s|REPLACE_CF_TOKEN|${CF_DNS_API_TOKEN}|g" \
+                -e "s|REPLACE_ACME_EMAIL|${ACME_EMAIL}|g" \
+                -e "s|REPLACE_WILDCARD_DOMAIN|${WILDCARD}|g" \
+                "$ACME_SRC" > "$ACME_TMP"
+            echo "Configuring Traefik ACME (wildcard: ${WILDCARD})"
+            kubectl apply -f "$ACME_TMP"
+            cp "$ACME_TMP" "$K3S_MANIFESTS/traefik-acme.yaml"
+
+            # 2. cluster-info ConfigMap (server.py)
+            SCRIPT="$APP_DIR/server.py"
+            [ -f "$SCRIPT" ] || die "$SCRIPT not found"
+            echo "Deploying cluster-info → https://${CLUSTER_INFO_HOST}"
+            kubectl create configmap cluster-info-script \
+                --from-file=server.py="$SCRIPT" \
+                --dry-run=client -o yaml | kubectl apply -f -
+
+            # 3. cluster-info manifests (deployment, service, ingress, RBAC)
+            MANIFEST="$APP_DIR/cluster-info.yaml"
+            [ -f "$MANIFEST" ] || die "$MANIFEST not found"
+            CI_TMP="$(mktemp /tmp/cluster-info-XXXXXX.yaml)"
+            sed "s|CLUSTER_INFO_HOST|${CLUSTER_INFO_HOST}|g" "$MANIFEST" > "$CI_TMP"
+            kubectl apply -f "$CI_TMP"
+            cp "$CI_TMP" "$K3S_MANIFESTS/cluster-info.yaml"
+
+            echo ""
+            echo "Done. App will be available at: https://${CLUSTER_INFO_HOST}"
+            echo "Note: Traefik may restart to pick up the ACME config (~30s)."
+            echo "Check status: qos-cluster-app status"
+            ;;
+        *)
+            die "unknown app '$APP'"
+            ;;
+    esac
+}
+
+cmd_disable() {
+    APP="${1:-cluster-info}"
+    case "$APP" in
+        cluster-info)
+            wait_kubectl
+
+            # Remove cluster-info resources
+            MANIFEST="$APP_DIR/cluster-info.yaml"
+            if [ -f "$MANIFEST" ]; then
+                TMP="$(mktemp /tmp/cluster-info-XXXXXX.yaml)"
+                trap 'rm -f "$TMP"' EXIT
+                sed "s|CLUSTER_INFO_HOST|placeholder|g" "$MANIFEST" > "$TMP"
+                kubectl delete -f "$TMP" --ignore-not-found
+            fi
+            kubectl delete configmap cluster-info-script --ignore-not-found
+
+            # Remove from k3s auto-apply (does not touch traefik-acme)
+            rm -f "$K3S_MANIFESTS/cluster-info.yaml"
+
+            echo "cluster-info removed"
+            ;;
+        *)
+            die "unknown app '$APP'"
+            ;;
+    esac
+}
+
+cmd_list() {
+    echo "Available apps:"
+    for f in "$APP_DIR"/*.yaml; do
+        [ -f "$f" ] || continue
+        name="$(basename "$f" .yaml)"
+        case "$name" in traefik-acme) continue;; esac
+        echo "  $name"
+    done
+}
+
+cmd_status() {
+    wait_kubectl
+    echo "=== Pods ==="
+    kubectl get pods -n default -l app=cluster-info 2>/dev/null || true
+    echo "=== Services ==="
+    kubectl get service -n default cluster-info 2>/dev/null || true
+    echo "=== Ingresses ==="
+    kubectl get ingress -n default cluster-info 2>/dev/null || true
+    echo "=== Traefik ACME ==="
+    kubectl get helmchartconfig traefik -n kube-system 2>/dev/null | grep -v "^NAME" || echo "  not configured"
+}
+
+# ── dispatch ──────────────────────────────────────────────────────────
+case "${1:-help}" in
+    enable)  shift; cmd_enable  "$@" ;;
+    disable) shift; cmd_disable "$@" ;;
+    list)    cmd_list ;;
+    status)  cmd_status ;;
+    help|--help|-h) usage ;;
+    *) echo "Unknown command: $1"; usage; exit 1 ;;
+esac
