@@ -80,9 +80,14 @@ for _i in $(seq 1 60); do
 done
 
 if [ -f /etc/rancher/k3s/k3s.yaml ]; then
-    # Get the node's primary IP (src field from ip route get 1)
     _node_ip="$(ip route get 1 | grep -o 'src [^ ]*' | awk '{print $2}')"
     [ -n "$_node_ip" ] && sed -i "s|127\.0\.0\.1:6443|${_node_ip}:6443|g" /etc/rancher/k3s/k3s.yaml 2>/dev/null || true
+
+    for _home in /root /home/emo; do
+        [ -d "$_home" ] || continue
+        mkdir -p "$_home/.kube" 2>/dev/null
+        ln -sf /etc/rancher/k3s/k3s.yaml "$_home/.kube/config" 2>/dev/null
+    done
 fi
 
 wait $_k3s_pid
