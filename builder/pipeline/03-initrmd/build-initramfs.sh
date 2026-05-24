@@ -154,6 +154,7 @@ mount -t devpts devpts /sysroot/dev/pts -o gid=5,mode=620,ptmxmode=666
 mkdir -p /sysroot/dev/shm
 mount -t tmpfs tmpfs -o nosuid,nodev,noexec /sysroot/dev/shm
 mount -t tmpfs tmpfs /sysroot/run
+awk '{print $1}' /proc/uptime > /sysroot/run/qos-boot-start 2>/dev/null || true
 mount -t tmpfs tmpfs -o nosuid,nodev,mode=1777 /sysroot/tmp
 
 # Fix setuid binaries and sensitive files that lose correct ownership

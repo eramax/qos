@@ -68,7 +68,7 @@ interface_branding_colour: 6
     protocol: linux
     kernel_path: boot():/vmlinuz
     module_path: boot():/initramfs.img
-    cmdline: root=LABEL=qos-root-a rootfstype=ext4 rootwait ro console=tty0 console=ttyS0,115200n8 earlycon=uart,io,0x3f8,115200n8 loglevel=7 ignore_loglevel net.ifnames=0 biosdevname=0
+    cmdline: root=LABEL=qos-root-a rootfstype=ext4 rootwait ro console=tty0 console=ttyS0,115200n8 loglevel=3 net.ifnames=0 biosdevname=0 nowatchdog rcupdate.rcu_expedited=1
 DISKLIMINE
 echo "  Boot payload staged: $(du -sh "$boot_payload" | awk '{print $1}')"
 
@@ -185,6 +185,7 @@ mount -t devpts devpts /sysroot/dev/pts 2>/dev/null
 mount -t tmpfs tmpfs /sysroot/dev/shm
 chmod 666 /sysroot/dev/null 2>/dev/null || true
 mount -t tmpfs tmpfs /sysroot/run
+awk '{print $1}' /proc/uptime > /sysroot/run/qos-boot-start 2>/dev/null || true
 mount -t tmpfs tmpfs /sysroot/tmp -o nosuid,nodev,mode=1777 2>/dev/null || true
 
 # Fix ownership lost when rootfs is built as non-root.
@@ -261,7 +262,7 @@ interface_branding_colour: 6
     protocol: linux
     kernel_path: boot():/vmlinuz
     module_path: boot():/initramfs-live.img
-    cmdline: rdinit=/init qos.live=1 panic=60 video=Virtual-1:1920x1080@60 console=tty0 console=ttyS0,115200n8 earlycon=uart,io,0x3f8,115200n8 loglevel=7 net.ifnames=0 biosdevname=0
+    cmdline: rdinit=/init qos.live=1 panic=60 video=Virtual-1:1920x1080@60 console=tty0 console=ttyS0,115200n8 loglevel=3 net.ifnames=0 biosdevname=0 nowatchdog rcupdate.rcu_expedited=1
 EOF
 mcopy -i "$esp_img" "$iso_build_dir/limine-live.conf" ::/limine.conf
 mcopy -i "$esp_img" "$boot_dir/vmlinuz"               ::/vmlinuz
