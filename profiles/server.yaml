@@ -10,5 +10,6 @@ qemu:
     builder/tools/boot-image.sh --qemu-iso dist/qos-server.iso
 components:
   - cluster-k3s
+  - cluster-app
   - seed-reader
   - bootiso

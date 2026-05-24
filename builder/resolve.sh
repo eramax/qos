@@ -63,6 +63,7 @@ profiles_dir = repo_root / "profiles"
 components_dir = repo_root / "components"
 repos_file = repo_root / "components" / "apk" / "repositories"
 base_kernel_config = repo_root / "components" / "kernel" / "kernel" / "x86_64.config"
+base_kernel_version_file = repo_root / "components" / "kernel" / "kernel" / "version"
 
 
 def load_yaml(path: Path):
@@ -102,6 +103,7 @@ def resolve_profile(name: str):
     resolving_profiles = set()
     kernel_base = None
     kernel_fragments = []
+    kernel_version = None
     qemu_command = None
 
     def add_component(component_name: str):
@@ -114,7 +116,7 @@ def resolve_profile(name: str):
         ordered.append(component_name)
 
     def walk_profile(profile_name: str):
-        nonlocal kernel_base, qemu_command
+        nonlocal kernel_base, kernel_version, qemu_command
         if profile_name in resolving_profiles:
             die(f"profile cycle detected at {profile_name}")
         resolving_profiles.add(profile_name)
@@ -126,6 +128,9 @@ def resolve_profile(name: str):
         base_cfg = kernel_cfg.get("base_config")
         if base_cfg:
             kernel_base = base_cfg
+        ver = kernel_cfg.get("version")
+        if ver:
+            kernel_version = str(ver)
         for frag in kernel_cfg.get("fragments", []) or []:
             if frag not in kernel_fragments:
                 kernel_fragments.append(frag)
@@ -140,7 +145,9 @@ def resolve_profile(name: str):
     walk_profile(name)
     if not kernel_base:
         kernel_base = str(base_kernel_config.relative_to(repo_root))
-    return ordered, kernel_base, kernel_fragments, qemu_command
+    if not kernel_version:
+        kernel_version = base_kernel_version_file.read_text().strip()
+    return ordered, kernel_base, kernel_fragments, kernel_version, qemu_command
 
 
 def resolved_packages(component_names):
@@ -174,7 +181,7 @@ def copy_tree_contents(src: Path, dest: Path) -> None:
 
 
 def stage_profile(profile_name: str, out_dir: Path):
-    component_names, kernel_base_rel, kernel_fragment_rels, qemu_command = resolve_profile(profile_name)
+    component_names, kernel_base_rel, kernel_fragment_rels, kernel_version, qemu_command = resolve_profile(profile_name)
     out_dir.mkdir(parents=True, exist_ok=True)
     rootfs_dir = out_dir / "rootfs"
     apk_dir = out_dir / "apk"
@@ -200,6 +207,7 @@ def stage_profile(profile_name: str, out_dir: Path):
         if not kernel_parts[-1].endswith("\n"):
             kernel_parts.append("\n")
     (kernel_dir / "x86_64.config").write_text("".join(kernel_parts))
+    (kernel_dir / "version").write_text(f"{kernel_version}\n")
 
     for component_name in component_names:
         component_dir = components_dir / component_name
@@ -223,14 +231,14 @@ if command == "packages":
     profile = parse_flag(args, "--profile")
     if not profile:
         die("usage: packages --profile <name>")
-    component_names, _, _, _ = resolve_profile(profile)
+    component_names, _, _, _, _ = resolve_profile(profile)
     for package in resolved_packages(component_names):
         print(package)
 elif command == "qemu":
     profile = parse_flag(args, "--profile")
     if not profile:
         die("usage: qemu --profile <name>")
-    _, _, _, qemu_command = resolve_profile(profile)
+    _, _, _, _, qemu_command = resolve_profile(profile)
     if not qemu_command:
         die(f"profile '{profile}' does not define qemu.command")
     print(qemu_command)
