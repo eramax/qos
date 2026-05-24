@@ -10,8 +10,8 @@ seed_done="/run/qos/seed-reader.done"
 # networking falls through to generic DHCP.
 if [ -x /usr/libexec/qos-seed-reader ]; then
   wait_count=0
-  while [ ! -f "$seed_done" ] && [ "$wait_count" -lt 60 ]; do
-    sleep 1
+  while [ ! -f "$seed_done" ] && [ "$wait_count" -lt 20 ]; do
+    sleep 0.25
     wait_count=$((wait_count + 1))
   done
 fi
@@ -36,10 +36,10 @@ done
 /bin/busybox ip link set dev "$iface" up
 
 i=0
-while [ "$i" -lt 5 ]; do
+while [ "$i" -lt 10 ]; do
   carrier=$(cat "/sys/class/net/$iface/carrier" 2>/dev/null || echo 0)
   [ "$carrier" = "1" ] && break
-  sleep 1
+  sleep 0.25
   i=$((i + 1))
 done
 
@@ -94,5 +94,4 @@ if ip -4 addr show dev "$iface" | grep -q 'inet '; then
   exec sleep 2147483647
 fi
 
-# -T 5: wait 5 s per discover; -t 10: 10 retries before backing off
-exec /bin/busybox udhcpc -i "$iface" -f -T 5 -t 10
+exec /bin/busybox udhcpc -i "$iface" -f -T 3 -t 4
