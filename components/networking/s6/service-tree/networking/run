@@ -86,6 +86,8 @@ fi
 # (e.g. "unknown method dhcp" with ifupdown-ng).
 /bin/busybox ip link set dev "$iface" up 2>/dev/null || true
 
+awk '{print int($1)}' /proc/uptime > /run/qos-boot-time 2>/dev/null || true
+
 if ip -4 addr show dev "$iface" | grep -q 'inet '; then
   if [ -x /etc/qos/seed-bootcmd ] && [ ! -f /run/qos/seed-bootcmd.done ]; then
     sh /etc/qos/seed-bootcmd >/dev/null 2>&1 || true

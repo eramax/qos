@@ -185,7 +185,6 @@ mount -t devpts devpts /sysroot/dev/pts 2>/dev/null
 mount -t tmpfs tmpfs /sysroot/dev/shm
 chmod 666 /sysroot/dev/null 2>/dev/null || true
 mount -t tmpfs tmpfs /sysroot/run
-awk '{print $1}' /proc/uptime > /sysroot/run/qos-boot-start 2>/dev/null || true
 mount -t tmpfs tmpfs /sysroot/tmp -o nosuid,nodev,mode=1777 2>/dev/null || true
 
 # Fix ownership lost when rootfs is built as non-root.

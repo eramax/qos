@@ -82,12 +82,9 @@ Y88b.Y8b88P Y88b. .d88P Y88b  d88P
  "Y888888"   "Y88888P"   "Y8888P"  
        Y8b                                                                              
 EOF
-boot_time_sec=""
-if [ -r /run/qos-boot-start ]; then
-  boot_start="$(cat /run/qos-boot-start)"
-  now="$(awk '{print $1}' /proc/uptime)"
-  boot_sec="$(awk -v s="$boot_start" -v n="$now" 'BEGIN { printf "%.1f", n - s }')"
-  boot_time_sec=" (boot: ${boot_sec}s)"
+boot_line=""
+if [ -r /run/qos-boot-time ]; then
+  boot_line=" (boot: $(cat /run/qos-boot-time)s)"
 fi
 
 printf '%s\n' '========================================'
@@ -96,7 +93,7 @@ if [ "$boot_source" = "live-cdrom" ]; then
   printf '%s\n' "Boot: live CD-ROM"
 fi
 printf '%s\n' "Kernel: $kernel_version"
-printf '%s\n' "Uptime: $uptime_minutes$boot_time_sec"
+printf '%s\n' "Uptime: $uptime_minutes$boot_line"
 printf '%s\n' "IPv4: $ipv4_addr"
 printf '%s\n' "IPv6: $ipv6_addr"
 printf '%s\n' "RAM: ${ram_mib} MiB"
