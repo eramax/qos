@@ -1,6 +1,6 @@
 name: base
 kernel:
-  version: 7.0.10
+  version: 7.1
   base_config: components/kernel/kernel/x86_64.config
   fragments:
     - components/core/kernel/core.conf
